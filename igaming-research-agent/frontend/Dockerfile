@@ -15,6 +15,7 @@ RUN npm run build
 FROM nginx:1.27-alpine
 
 ENV PORT=80
+ENV BACKEND_ORIGIN=http://localhost:8000
 
 COPY nginx.conf /etc/nginx/templates/default.conf.template
 COPY --from=builder /app/dist /usr/share/nginx/html
