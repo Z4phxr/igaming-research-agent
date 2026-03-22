@@ -1,9 +1,16 @@
 import axios from 'axios';
 import type { CreateQueryDto, Query, Report, UpdateQueryDto } from '@/types';
 
+function normalizeApiBaseUrl(rawBaseUrl: string): string {
+  const trimmed = rawBaseUrl.replace(/\/+$/, '');
+  return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
+}
+
+const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+
 export const api = axios.create({
-  // TODO: Set VITE_API_BASE_URL in each environment; fallback keeps local dev working.
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000',
+  // TODO: Keep environment URLs normalized to avoid /api/api path duplication.
+  baseURL: normalizeApiBaseUrl(configuredBaseUrl),
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
@@ -41,7 +48,7 @@ function getApiErrorMessage(error: unknown, fallback: string): string {
 
 export async function getReports(): Promise<Report[]> {
   try {
-    const { data } = await api.get<Report[]>('/api/reports');
+    const { data } = await api.get<Report[]>('/reports');
     return data;
   } catch (error) {
     throw new Error(getApiErrorMessage(error, 'Failed to fetch reports.'));
@@ -50,7 +57,7 @@ export async function getReports(): Promise<Report[]> {
 
 export async function getReportById(id: number): Promise<Report> {
   try {
-    const { data } = await api.get<Report>(`/api/reports/${id}`);
+    const { data } = await api.get<Report>(`/reports/${id}`);
     return data;
   } catch (error) {
     throw new Error(getApiErrorMessage(error, 'Failed to fetch report details.'));
@@ -59,7 +66,7 @@ export async function getReportById(id: number): Promise<Report> {
 
 export async function getQueries(): Promise<Query[]> {
   try {
-    const { data } = await api.get<Query[]>('/api/queries');
+    const { data } = await api.get<Query[]>('/queries');
     return data;
   } catch (error) {
     throw new Error(getApiErrorMessage(error, 'Failed to fetch queries.'));
@@ -68,7 +75,7 @@ export async function getQueries(): Promise<Query[]> {
 
 export async function createQuery(data: CreateQueryDto): Promise<Query> {
   try {
-    const { data: created } = await api.post<Query>('/api/queries', data);
+    const { data: created } = await api.post<Query>('/queries', data);
     return created;
   } catch (error) {
     throw new Error(getApiErrorMessage(error, 'Failed to create query.'));
@@ -77,7 +84,7 @@ export async function createQuery(data: CreateQueryDto): Promise<Query> {
 
 export async function updateQuery(id: number, data: UpdateQueryDto): Promise<Query> {
   try {
-    const { data: updated } = await api.put<Query>(`/api/queries/${id}`, data);
+    const { data: updated } = await api.put<Query>(`/queries/${id}`, data);
     return updated;
   } catch (error) {
     throw new Error(getApiErrorMessage(error, 'Failed to update query.'));
@@ -86,7 +93,7 @@ export async function updateQuery(id: number, data: UpdateQueryDto): Promise<Que
 
 export async function deleteQuery(id: number): Promise<void> {
   try {
-    await api.delete(`/api/queries/${id}`);
+    await api.delete(`/queries/${id}`);
   } catch (error) {
     throw new Error(getApiErrorMessage(error, 'Failed to delete query.'));
   }

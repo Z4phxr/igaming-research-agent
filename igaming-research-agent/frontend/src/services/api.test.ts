@@ -10,8 +10,8 @@ import {
 
 
 describe('api service', () => {
-  it('uses localhost:8000 as fallback base URL', () => {
-    expect(api.defaults.baseURL).toBe('http://localhost:8000');
+  it('uses localhost:8000 with normalized /api as fallback base URL', () => {
+    expect(api.defaults.baseURL).toBe('http://localhost:8000/api');
   });
 
   it('calls getQueries endpoint', async () => {
@@ -19,7 +19,7 @@ describe('api service', () => {
 
     await getQueries();
 
-    expect(spy).toHaveBeenCalledWith('/api/queries');
+    expect(spy).toHaveBeenCalledWith('/queries');
     spy.mockRestore();
   });
 
@@ -32,13 +32,13 @@ describe('api service', () => {
     await updateQuery(1, { search_term: 'updated' });
     await deleteQuery(1);
 
-    expect(postSpy).toHaveBeenCalledWith('/api/queries', {
+    expect(postSpy).toHaveBeenCalledWith('/queries', {
       search_term: 'term',
       stream_type: 'legislative',
       is_active: true,
     });
-    expect(putSpy).toHaveBeenCalledWith('/api/queries/1', { search_term: 'updated' });
-    expect(deleteSpy).toHaveBeenCalledWith('/api/queries/1');
+    expect(putSpy).toHaveBeenCalledWith('/queries/1', { search_term: 'updated' });
+    expect(deleteSpy).toHaveBeenCalledWith('/queries/1');
 
     postSpy.mockRestore();
     putSpy.mockRestore();
@@ -51,8 +51,8 @@ describe('api service', () => {
     await getReports();
     await getReportById(7);
 
-    expect(spy).toHaveBeenCalledWith('/api/reports');
-    expect(spy).toHaveBeenCalledWith('/api/reports/7');
+    expect(spy).toHaveBeenCalledWith('/reports');
+    expect(spy).toHaveBeenCalledWith('/reports/7');
     spy.mockRestore();
   });
 });
