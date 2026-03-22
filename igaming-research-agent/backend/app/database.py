@@ -1,22 +1,21 @@
-"""Database setup for SQLAlchemy + SQLite.
+"""Database setup for SQLAlchemy connection/session management.
 
-SQLite file is stored at backend/data.db.
-TODO: Replace with Alembic migrations in production.
+TODO: Replace metadata create_all with migration-based schema management.
 """
 
+import os
+
 from sqlalchemy import create_engine
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 
-from app.config import settings
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is not set")
 
-connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-engine = create_engine(settings.database_url, connect_args=connect_args, echo=False)
-SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
-
-
-class Base(DeclarativeBase):
-    """Base class for all SQLAlchemy models."""
+Base = declarative_base()
 
 
 def get_db():

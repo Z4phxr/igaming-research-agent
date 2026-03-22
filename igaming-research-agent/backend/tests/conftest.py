@@ -15,8 +15,9 @@ from app.models import Query
 
 @pytest.fixture()
 def db_session() -> Generator[Session, None, None]:
+    SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
     engine = create_engine(
-        "sqlite:///:memory:",
+        SQLALCHEMY_DATABASE_URL,
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )

@@ -11,14 +11,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import queries as queries_router
 from app.api import reports as reports_router
 from app.config import settings
-from app.database import init_db
+from app.database import Base, engine
+from app import models  # noqa: F401
 from app.services.scheduler import start_scheduler, stop_scheduler
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     """Initialize DB and scheduler on startup; stop scheduler on shutdown."""
-    init_db()
+    Base.metadata.create_all(bind=engine)
     start_scheduler()
     yield
     stop_scheduler()

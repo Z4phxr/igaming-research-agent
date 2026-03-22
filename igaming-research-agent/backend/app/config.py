@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_env: str = "development"
-    database_url: str = "sqlite:///./data.db"
+    database_url: str
     frontend_origin: str = "http://localhost:3000"
 
     scheduler_hour: int = 7
@@ -16,6 +16,7 @@ class Settings(BaseSettings):
 
     serper_api_key: str = ""
     anthropic_api_key: str = ""
+    openai_api_key: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",
