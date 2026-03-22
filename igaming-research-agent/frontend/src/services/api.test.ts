@@ -2,6 +2,7 @@ import {
   api,
   createQuery,
   deleteQuery,
+  getLatestReport,
   getQueries,
   getReportById,
   getReports,
@@ -49,10 +50,25 @@ describe('api service', () => {
     const spy = vi.spyOn(api, 'get').mockResolvedValue({ data: [] });
 
     await getReports();
+    await getLatestReport();
     await getReportById(7);
 
     expect(spy).toHaveBeenCalledWith('/reports');
+    expect(spy).toHaveBeenCalledWith('/reports/latest');
     expect(spy).toHaveBeenCalledWith('/reports/7');
+    spy.mockRestore();
+  });
+
+  it('returns null from getLatestReport on 404', async () => {
+    const notFoundError = Object.assign(new Error('Not found'), {
+      isAxiosError: true,
+      response: { status: 404 },
+    });
+    const spy = vi.spyOn(api, 'get').mockRejectedValue(notFoundError);
+
+    const result = await getLatestReport();
+
+    expect(result).toBeNull();
     spy.mockRestore();
   });
 });

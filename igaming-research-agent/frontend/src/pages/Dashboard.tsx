@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import ArticleCard from '@/components/ArticleCard';
-import { getReports } from '@/services/api';
+import { getLatestReport } from '@/services/api';
 import type { Report } from '@/types';
 
 export default function Dashboard() {
@@ -13,8 +13,8 @@ export default function Dashboard() {
       setLoading(true);
       setError(false);
       try {
-        const reports = await getReports();
-        setLatestReport(reports[0] ?? null);
+        const report = await getLatestReport();
+        setLatestReport(report);
       } catch {
         setError(true);
       } finally {

@@ -55,6 +55,18 @@ export async function getReports(): Promise<Report[]> {
   }
 }
 
+export async function getLatestReport(): Promise<Report | null> {
+  try {
+    const { data } = await api.get<Report>('/reports/latest');
+    return data;
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
+      return null;
+    }
+    throw new Error(getApiErrorMessage(error, 'Failed to fetch latest report.'));
+  }
+}
+
 export async function getReportById(id: number): Promise<Report> {
   try {
     const { data } = await api.get<Report>(`/reports/${id}`);

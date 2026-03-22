@@ -59,6 +59,7 @@ describe('integration user flow', () => {
     vi.spyOn(apiService, 'updateQuery').mockResolvedValue({} as any);
     vi.spyOn(apiService, 'deleteQuery').mockResolvedValue();
     vi.spyOn(apiService, 'getReports').mockImplementation(async () => [...reports]);
+    vi.spyOn(apiService, 'getLatestReport').mockImplementation(async () => reports[0] as any);
     vi.spyOn(apiService, 'getReportById').mockImplementation(async (id: number) => {
       return reports.find((report) => report.id === id) as any;
     });
