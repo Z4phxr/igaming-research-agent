@@ -54,7 +54,7 @@ def test_get_report_by_id_returns_full_payload(client, db_session, seeded_query)
 
 
 def test_post_reports_run_returns_200_with_mocked_pipeline(client, db_session):
-    def fake_run_daily_pipeline(db):
+    def fake_run_daily_pipeline(db, raise_on_error=False):
         report = Report(
             report_date=datetime.date.today(),
             total_articles_found=3,

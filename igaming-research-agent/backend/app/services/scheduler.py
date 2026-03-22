@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 _scheduler = BackgroundScheduler(timezone="UTC")
 
 
-def run_daily_pipeline(db: Session | None = None) -> None:
+def run_daily_pipeline(db: Session | None = None, raise_on_error: bool = False) -> None:
     """Execute the full daily research pipeline.
 
     TODO: Break this into smaller orchestration functions and add metrics.
@@ -115,9 +115,11 @@ def run_daily_pipeline(db: Session | None = None) -> None:
             len(persisted_articles),
         )
 
-    except Exception:
+    except Exception as exc:
         session.rollback()
         logger.exception("Daily pipeline failed with unhandled exception")
+        if raise_on_error:
+            raise exc
     finally:
         if owns_session:
             session.close()

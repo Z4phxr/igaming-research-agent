@@ -60,14 +60,10 @@ def list_reports(db: Session = Depends(get_db)):
 
 @router.post("/run")
 def run_reports_pipeline(db: Session = Depends(get_db)):
-    latest_before = (
-        db.query(ReportModel)
-        .order_by(ReportModel.generated_at.desc(), ReportModel.id.desc())
-        .first()
-    )
+    count_before = db.query(ReportModel).count()
 
     try:
-        run_daily_pipeline(db)
+        run_daily_pipeline(db, raise_on_error=True)
     except Exception as exc:
         return JSONResponse(
             status_code=500,
@@ -80,6 +76,7 @@ def run_reports_pipeline(db: Session = Depends(get_db)):
         .order_by(ReportModel.generated_at.desc(), ReportModel.id.desc())
         .first()
     )
+    count_after = db.query(ReportModel).count()
 
     if latest_after is None:
         return JSONResponse(
@@ -87,7 +84,7 @@ def run_reports_pipeline(db: Session = Depends(get_db)):
             content={"status": "error", "message": "Pipeline completed without creating a report"},
         )
 
-    if latest_before is not None and latest_before.id == latest_after.id:
+    if count_after <= count_before:
         return JSONResponse(
             status_code=500,
             content={"status": "error", "message": "Pipeline did not create a new report"},
