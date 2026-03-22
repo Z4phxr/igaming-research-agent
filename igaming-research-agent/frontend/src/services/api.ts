@@ -25,6 +25,9 @@ function getApiErrorMessage(error: unknown, fallback: string): string {
       | undefined;
 
     if (typeof responseData === 'string' && responseData.trim()) {
+      if (responseData.includes('504 Gateway Time-out') || responseData.includes('<html')) {
+        return 'Pipeline request timed out at the gateway. It may still be running; check reports in 1-2 minutes.';
+      }
       return responseData;
     }
 
@@ -135,13 +138,21 @@ export async function submitArticleFeedback(
 
 export async function runPipeline(): Promise<{ status: string; message: string; articles_found?: number }> {
   try {
-    const { data } = await api.post<{ status: string; message: string; articles_found?: number }>('/reports/run');
+    const { data } = await api.post<{ status: string; message: string; articles_found?: number }>(
+      '/reports/run',
+      {},
+      { timeout: 300000 },
+    );
     return data;
   } catch (error) {
     if (axios.isAxiosError(error) && !error.response) {
       try {
         // Fallback to same-origin proxy path for deployments where frontend routes /api to backend.
-        const { data } = await axios.post<{ status: string; message: string; articles_found?: number }>('/api/reports/run');
+        const { data } = await axios.post<{ status: string; message: string; articles_found?: number }>(
+          '/api/reports/run',
+          {},
+          { timeout: 300000 },
+        );
         return data;
       } catch (fallbackError) {
         throw new Error(getApiErrorMessage(fallbackError, 'Failed to run pipeline.'));

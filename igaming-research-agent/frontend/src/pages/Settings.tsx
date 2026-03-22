@@ -120,21 +120,13 @@ export default function Settings() {
 
   return (
     <section className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex items-center justify-center">
         <h2 className="text-3xl font-semibold text-white">Query Manager</h2>
-        <button
-          type="button"
-          onClick={() => void handleRunPipeline()}
-          disabled={runningPipeline}
-          className="rounded-md bg-[#2563eb] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1d4ed8] disabled:opacity-50"
-        >
-          {runningPipeline ? 'Running pipeline...' : 'Run Pipeline'}
-        </button>
       </div>
 
-      {pipelineMessage && <p className="text-sm text-[#16a34a]">{pipelineMessage}</p>}
+      {pipelineMessage && <p className="text-center text-sm text-[#16a34a]">{pipelineMessage}</p>}
 
-      <form onSubmit={submit} className="max-w-3xl space-y-4 rounded-lg border border-[#222222] bg-[#111111] p-5">
+      <form onSubmit={submit} className="mx-auto w-full max-w-3xl space-y-4 rounded-lg border border-[#222222] bg-[#111111] p-5">
         <div>
           <label htmlFor="searchTerm" className="mb-1 block text-[12px] uppercase tracking-[0.05em] text-[#888888]">Search query</label>
           <input
@@ -252,6 +244,17 @@ export default function Settings() {
             </tbody>
           </table>
         )}
+      </div>
+
+      <div className="flex flex-col items-center gap-2">
+        <button
+          type="button"
+          onClick={() => void handleRunPipeline()}
+          disabled={runningPipeline}
+          className="rounded-md bg-[#2563eb] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1d4ed8] disabled:opacity-50"
+        >
+          {runningPipeline ? 'Running pipeline...' : 'Run Pipeline'}
+        </button>
       </div>
     </section>
   );

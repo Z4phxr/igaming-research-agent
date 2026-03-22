@@ -18,6 +18,11 @@ if not _anthropic_api_key:
 
 anthropic_client = Anthropic(api_key=_anthropic_api_key)
 
+# Cost optimization: Haiku used for simple classification
+# and structured output tasks. Sonnet reserved for
+# narrative generation in report_generator.py only.
+_MODEL = "claude-haiku-4-5-20251001"
+
 _RELEVANCE_SYSTEM_PROMPT = """
 You are a strict content filter for a USA iGaming research agent.
 Answer only YES or NO.
@@ -214,7 +219,7 @@ def is_relevant(article: dict) -> bool:
         # Cost optimization: temperature=0 for deterministic outputs.
         # CHANGE 3: migrated model calls from OpenAI chat completions to Anthropic messages API.
         response = anthropic_client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model=_MODEL,
             max_tokens=10,
             temperature=0,
             system=_RELEVANCE_SYSTEM_PROMPT,
@@ -253,7 +258,7 @@ def score_and_summarize(article: dict | str) -> Optional[dict]:
         # Cost optimization: temperature=0 for deterministic outputs.
         # CHANGE 3: migrated model calls from OpenAI chat completions to Anthropic messages API.
         response = anthropic_client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model=_MODEL,
             max_tokens=200,
             temperature=0,
             system=_SCORING_SYSTEM_PROMPT,

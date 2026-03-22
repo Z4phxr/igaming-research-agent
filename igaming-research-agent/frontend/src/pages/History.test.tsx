@@ -30,6 +30,8 @@ describe('History', () => {
       report_date: '2026-03-02',
       total_articles_found: 8,
       total_articles_kept: 3,
+      briefing: '## Executive Summary\nStrong regulatory momentum this week.',
+      briefing_generated_at: '2026-03-02T02:00:00Z',
       generated_at: '2026-03-02T01:00:00Z',
       articles: [
         {
@@ -38,6 +40,9 @@ describe('History', () => {
           url: 'https://example.com/picked',
           summary: 'Summary',
           score: 7,
+          kept: true,
+          rejection_reason: null,
+          passed_relevance_filter: true,
           tags: 'regulation',
           source_domain: 'example.com',
           published_date: '2026-03-02T00:00:00Z',
@@ -57,6 +62,8 @@ describe('History', () => {
     await user.click(screen.getByText('2026-03-02'));
 
     await waitFor(() => {
+      expect(screen.getByText(/executive summary/i)).toBeInTheDocument();
+      expect(screen.getByText(/strong regulatory momentum this week/i)).toBeInTheDocument();
       expect(screen.getByText(/picked report article/i)).toBeInTheDocument();
     });
   });
