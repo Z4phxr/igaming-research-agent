@@ -38,6 +38,24 @@ Notes:
 - SQLite file is persisted at `backend/data.db` via bind mount.
 - You can override frontend API URL at build time with `VITE_API_BASE_URL`.
 
+## Railway Deploy
+
+### Backend from repository root
+- This repository includes root-level deployment files (`Dockerfile` and `railway.toml`) so Railway can build even when the repo root only contains the `igaming-research-agent/` folder.
+- Health endpoint: `/api/health`.
+
+### Recommended monorepo setup (two Railway services)
+1. Backend service
+	- Root directory: `igaming-research-agent/backend`
+	- Builder: Dockerfile (`backend/Dockerfile`) or Python Nixpacks
+	- Required env vars: `DATABASE_URL`, `OPENAI_API_KEY`, `SERPER_API_KEY`
+2. Frontend service
+	- Root directory: `igaming-research-agent/frontend`
+	- Builder: Dockerfile (`frontend/Dockerfile`) or Node Nixpacks
+	- Set `VITE_API_BASE_URL` to your backend public URL with `/api`
+
+If Railway reports `Railpack could not determine how to build the app`, verify the service root directory is set correctly or deploy using the repository root with the included root `Dockerfile`.
+
 ## TODO
 - Replace placeholder service implementations in `backend/app/services/*` with real Serper, scraper, and LLM calls.
 - Add production `.env` and secret management.
