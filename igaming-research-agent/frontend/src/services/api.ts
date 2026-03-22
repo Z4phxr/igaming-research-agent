@@ -20,7 +20,7 @@ export const api = axios.create({
 function getApiErrorMessage(error: unknown, fallback: string): string {
   if (axios.isAxiosError(error)) {
     const responseData = error.response?.data as
-      | { detail?: string | { message?: string } }
+      | { detail?: string | { message?: string }; message?: string }
       | string
       | undefined;
 
@@ -29,6 +29,9 @@ function getApiErrorMessage(error: unknown, fallback: string): string {
     }
 
     if (responseData && typeof responseData === 'object') {
+      if (typeof responseData.message === 'string' && responseData.message.trim()) {
+        return responseData.message;
+      }
       if (typeof responseData.detail === 'string' && responseData.detail.trim()) {
         return responseData.detail;
       }
@@ -135,6 +138,15 @@ export async function runPipeline(): Promise<{ status: string; message: string; 
     const { data } = await api.post<{ status: string; message: string; articles_found?: number }>('/reports/run');
     return data;
   } catch (error) {
+    if (axios.isAxiosError(error) && !error.response) {
+      try {
+        // Fallback to same-origin proxy path for deployments where frontend routes /api to backend.
+        const { data } = await axios.post<{ status: string; message: string; articles_found?: number }>('/api/reports/run');
+        return data;
+      } catch (fallbackError) {
+        throw new Error(getApiErrorMessage(fallbackError, 'Failed to run pipeline.'));
+      }
+    }
     throw new Error(getApiErrorMessage(error, 'Failed to run pipeline.'));
   }
 }

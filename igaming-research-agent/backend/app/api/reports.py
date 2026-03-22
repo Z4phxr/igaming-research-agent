@@ -27,6 +27,8 @@ def _serialize_report(report: ReportModel, show_all: bool) -> dict:
         "report_date": report.report_date,
         "total_articles_found": report.total_articles_found,
         "total_articles_kept": report.total_articles_kept,
+        "briefing": report.briefing,
+        "briefing_generated_at": report.briefing_generated_at,
         "generated_at": report.generated_at,
         "articles": [
             {

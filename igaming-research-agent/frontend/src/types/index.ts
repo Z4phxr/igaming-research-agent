@@ -32,6 +32,8 @@ export interface Report {
   generated_at: string;
   total_articles_found: number;
   total_articles_kept: number;
+  briefing?: string | null;
+  briefing_generated_at?: string | null;
   articles: Article[];
 }
 

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app.models import Article, Report
 from app.services.analyzer import run_analysis_pipeline
+from app.services.report_generator import generate_briefing
 from app.services.scraper import scrape_articles
 from app.services.search import run_search_pipeline
 
@@ -51,6 +52,15 @@ def run_daily_pipeline(db: Session | None = None, raise_on_error: bool = False) 
         logger.info("Daily pipeline step analysis complete: count=%s", len(final_articles))
         if not final_articles:
             logger.warning("Daily pipeline analysis returned no final articles")
+
+        briefing_text = generate_briefing(final_articles)
+        briefing_generated_at = None
+        if briefing_text is None:
+            logger.warning("Briefing generation failed or returned empty; saving blank briefing")
+            briefing_text = ""
+        else:
+            briefing_generated_at = datetime.datetime.utcnow()
+            logger.info("Briefing generated successfully")
 
         persisted_articles: list[Article] = []
         for item in all_articles:
@@ -101,6 +111,8 @@ def run_daily_pipeline(db: Session | None = None, raise_on_error: bool = False) 
             report_date=datetime.date.today(),
             total_articles_found=len(raw_articles),
             total_articles_kept=sum(1 for item in all_articles if item.get("kept")),
+            briefing=briefing_text,
+            briefing_generated_at=briefing_generated_at,
             generated_at=datetime.datetime.utcnow(),
             articles=persisted_articles,
         )

@@ -39,6 +39,7 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     ensure_article_runtime_columns()
+    ensure_report_runtime_columns()
 
 
 def ensure_article_runtime_columns() -> None:
@@ -62,6 +63,27 @@ def ensure_article_runtime_columns() -> None:
         statements.append(f"ALTER TABLE articles ADD COLUMN kept BOOLEAN NOT NULL DEFAULT {bool_default}")
     if "rejection_reason" not in existing_columns:
         statements.append("ALTER TABLE articles ADD COLUMN rejection_reason VARCHAR(64)")
+
+    if not statements:
+        return
+
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+
+def ensure_report_runtime_columns() -> None:
+    """Backfill newer Report columns in existing databases without migrations."""
+    inspector = inspect(engine)
+    if "reports" not in inspector.get_table_names():
+        return
+
+    existing_columns = {column["name"] for column in inspector.get_columns("reports")}
+    statements: list[str] = []
+    if "briefing" not in existing_columns:
+        statements.append("ALTER TABLE reports ADD COLUMN briefing TEXT")
+    if "briefing_generated_at" not in existing_columns:
+        statements.append("ALTER TABLE reports ADD COLUMN briefing_generated_at DATETIME")
 
     if not statements:
         return

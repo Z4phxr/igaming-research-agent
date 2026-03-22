@@ -57,6 +57,8 @@ class ReportSummaryOut(BaseModel):
     report_date: datetime.date
     total_articles_found: Optional[int] = None
     total_articles_kept: Optional[int] = None
+    briefing: Optional[str] = None
+    briefing_generated_at: Optional[datetime.datetime] = None
     generated_at: datetime.datetime
 
     model_config = ConfigDict(from_attributes=True)

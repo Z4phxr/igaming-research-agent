@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import ArticleCard from '@/components/ArticleCard';
 import { getLatestReport } from '@/services/api';
 import type { Report } from '@/types';
@@ -88,6 +89,34 @@ export default function Dashboard() {
             >
               {showAllArticles ? 'Show kept only' : 'Show all articles'}
             </button>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-[11px] uppercase tracking-[0.1em] text-[#555555]">Intelligence Briefing</p>
+            <div className="rounded-lg border border-[#222222] bg-[#111111] p-4">
+              {latestReport.briefing ? (
+                <ReactMarkdown
+                  components={{
+                    h2: ({ children }) => (
+                      <h2 className="mb-3 border-b border-[#222222] pb-2 text-base font-semibold text-white">{children}</h2>
+                    ),
+                    p: ({ children }) => <p className="mb-3 leading-7 text-[#888888] last:mb-0">{children}</p>,
+                    strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+                    ul: ({ children }) => <ul className="mb-2 list-disc space-y-1 pl-5 text-[#888888]">{children}</ul>,
+                    li: ({ children }) => <li className="marker:text-[#2563eb]">{children}</li>,
+                  }}
+                >
+                  {latestReport.briefing}
+                </ReactMarkdown>
+              ) : (
+                <p className="text-sm text-[#555555]">Briefing not available for this report</p>
+              )}
+            </div>
+            <p className="text-[11px] text-[#555555]">
+              {latestReport.briefing_generated_at
+                ? `Generated ${new Date(latestReport.briefing_generated_at).toLocaleString()}`
+                : 'Briefing timestamp unavailable'}
+            </p>
           </div>
 
           <div>
