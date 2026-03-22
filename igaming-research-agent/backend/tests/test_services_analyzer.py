@@ -3,28 +3,24 @@ import os
 
 import pytest
 
-os.environ.setdefault("OPENAI_API_KEY", "test-key")
+os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
 
 from app.services import analyzer
 
 
 class MockCompletionResponse:
-    class Choice:
-        class Message:
-            def __init__(self, content):
-                self.content = content
-
-        def __init__(self, content):
-            self.message = self.Message(content)
+    class Block:
+        def __init__(self, text):
+            self.text = text
 
     def __init__(self, content):
-        self.choices = [self.Choice(content)]
+        self.content = [self.Block(content)]
 
 
-def test_module_raises_when_openai_key_missing(monkeypatch):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+def test_module_raises_when_anthropic_key_missing(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
-    with pytest.raises(RuntimeError, match="OPENAI_API_KEY is missing"):
+    with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY is missing"):
         import app.services.analyzer as analyzer_module
 
         importlib.reload(analyzer_module)
@@ -32,12 +28,14 @@ def test_module_raises_when_openai_key_missing(monkeypatch):
 
 def test_is_relevant_returns_true_for_yes_response(monkeypatch):
     def fake_create(**kwargs):
-        assert kwargs["model"] == "gpt-4o-mini"
-        assert kwargs["max_tokens"] == 5
+        assert kwargs["model"] == "claude-sonnet-4-20250514"
+        assert kwargs["max_tokens"] == 10
         assert kwargs["temperature"] == 0
+        assert kwargs["system"]
+        assert kwargs["messages"][0]["role"] == "user"
         return MockCompletionResponse("YES")
 
-    monkeypatch.setattr(analyzer.client.chat.completions, "create", fake_create)
+    monkeypatch.setattr(analyzer.anthropic_client.messages, "create", fake_create)
 
     result = analyzer.is_relevant(
         {
@@ -53,17 +51,20 @@ def test_is_relevant_returns_true_for_yes_response(monkeypatch):
 
 def test_score_and_summarize_parses_expected_format(monkeypatch):
     def fake_create(**kwargs):
-        assert kwargs["model"] == "gpt-4o-mini"
+        assert kwargs["model"] == "claude-sonnet-4-20250514"
         assert kwargs["max_tokens"] == 200
         assert kwargs["temperature"] == 0
-        assert "Content:" in kwargs["messages"][1]["content"]
+        assert kwargs["system"]
+        assert "Content:" in kwargs["messages"][0]["content"]
         return MockCompletionResponse(
             "SCORE: 8\n"
-            "SUMMARY: First sentence. Second sentence. Third sentence.\n"
+            "SUMMARY: First sentence explains the legislative update in detail with a clear policy timeline. "
+            "Second sentence covers operator impact with revenue context and commission decision framing. "
+            "Third sentence highlights near-term business implications and expected market response.\n"
             "TAGS: legislation, regulation"
         )
 
-    monkeypatch.setattr(analyzer.client.chat.completions, "create", fake_create)
+    monkeypatch.setattr(analyzer.anthropic_client.messages, "create", fake_create)
 
     result = analyzer.score_and_summarize(
         {
@@ -77,7 +78,7 @@ def test_score_and_summarize_parses_expected_format(monkeypatch):
 
     assert result is not None
     assert result["score"] == 8
-    assert result["summary"] == "First sentence. Second sentence. Third sentence."
+    assert "First sentence explains the legislative update" in result["summary"]
     assert result["tags"] == "legislation, regulation"
 
 
@@ -111,7 +112,7 @@ def test_is_relevant_article_compat_alias(monkeypatch):
 
 
 def test_score_and_summarize_returns_none_on_parse_error(monkeypatch):
-    monkeypatch.setattr(analyzer.client.chat.completions, "create", lambda **kwargs: MockCompletionResponse("invalid"))
+    monkeypatch.setattr(analyzer.anthropic_client.messages, "create", lambda **kwargs: MockCompletionResponse("invalid"))
 
     result = analyzer.score_and_summarize(
         {
