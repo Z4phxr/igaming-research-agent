@@ -6,6 +6,7 @@ import {
   getQueries,
   getReportById,
   getReports,
+  submitArticleFeedback,
   updateQuery,
 } from '@/services/api';
 
@@ -72,5 +73,19 @@ describe('api service', () => {
 
     expect(result).toBeNull();
     spy.mockRestore();
+  });
+
+  it('posts article feedback payload', async () => {
+    const postSpy = vi.spyOn(api, 'post').mockResolvedValue({
+      data: { status: 'success', message: 'Thank you for the feedback' },
+    });
+
+    await submitArticleFeedback(7, 'score_too_low', 9);
+
+    expect(postSpy).toHaveBeenCalledWith('/articles/7/feedback', {
+      feedback_type: 'score_too_low',
+      user_corrected_score: 9,
+    });
+    postSpy.mockRestore();
   });
 });

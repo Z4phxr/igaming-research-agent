@@ -4,7 +4,7 @@ TODO: Add stricter field validators and custom error messages.
 """
 
 import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -64,3 +64,18 @@ class ReportSummaryOut(BaseModel):
 
 class ReportOut(ReportSummaryOut):
     articles: list[ArticleOut] = []
+
+
+class ArticleFeedbackCreate(BaseModel):
+    feedback_type: Literal["helpful", "score_too_low", "score_too_high"]
+    user_corrected_score: Optional[int] = None
+
+
+class ArticleFeedbackOut(BaseModel):
+    id: int
+    article_id: int
+    feedback_type: Literal["helpful", "score_too_low", "score_too_high"]
+    user_corrected_score: Optional[int] = None
+    created_at: datetime.datetime
+
+    model_config = ConfigDict(from_attributes=True)

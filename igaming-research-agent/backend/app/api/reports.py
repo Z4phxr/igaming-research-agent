@@ -8,11 +8,14 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
+from app.models import Article as ArticleModel
+from app.models import ArticleFeedback as ArticleFeedbackModel
 from app.models import Report as ReportModel
-from app.schemas import ReportSummaryOut
+from app.schemas import ArticleFeedbackCreate, ReportSummaryOut
 from app.services.scheduler import run_daily_pipeline
 
 router = APIRouter()
+feedback_router = APIRouter()
 
 
 def _serialize_report(report: ReportModel, show_all: bool) -> dict:
@@ -129,3 +132,34 @@ def get_report(report_id: int, show_all: bool = False, db: Session = Depends(get
     if report is None:
         raise HTTPException(status_code=404, detail="Report not found")
     return _serialize_report(report, show_all=show_all)
+
+
+@feedback_router.post("/articles/{article_id}/feedback")
+def submit_article_feedback(
+    article_id: int,
+    payload: ArticleFeedbackCreate,
+    db: Session = Depends(get_db),
+):
+    article = db.query(ArticleModel).filter(ArticleModel.id == article_id).first()
+    if article is None:
+        raise HTTPException(status_code=404, detail="Article not found")
+
+    corrected_score = payload.user_corrected_score
+    if corrected_score is not None and not 1 <= corrected_score <= 10:
+        raise HTTPException(status_code=400, detail="user_corrected_score must be between 1 and 10")
+
+    if payload.feedback_type in {"score_too_low", "score_too_high"} and corrected_score is None:
+        raise HTTPException(status_code=400, detail="user_corrected_score is required for score feedback")
+
+    if payload.feedback_type == "helpful":
+        corrected_score = None
+
+    feedback = ArticleFeedbackModel(
+        article_id=article_id,
+        feedback_type=payload.feedback_type,
+        user_corrected_score=corrected_score,
+    )
+    db.add(feedback)
+    db.commit()
+
+    return {"status": "success", "message": "Thank you for the feedback"}

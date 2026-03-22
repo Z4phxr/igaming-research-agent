@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { CreateQueryDto, Query, Report, UpdateQueryDto } from '@/types';
+import type { CreateQueryDto, FeedbackType, Query, Report, UpdateQueryDto } from '@/types';
 
 function normalizeApiBaseUrl(rawBaseUrl: string): string {
   const trimmed = rawBaseUrl.replace(/\/+$/, '');
@@ -110,5 +110,22 @@ export async function deleteQuery(id: number): Promise<void> {
     await api.delete(`/queries/${id}`);
   } catch (error) {
     throw new Error(getApiErrorMessage(error, 'Failed to delete query.'));
+  }
+}
+
+export async function submitArticleFeedback(
+  articleId: number,
+  feedbackType: FeedbackType,
+  correctedScore?: number,
+): Promise<{ status: string; message: string }> {
+  try {
+    const payload = {
+      feedback_type: feedbackType,
+      user_corrected_score: correctedScore,
+    };
+    const { data } = await api.post<{ status: string; message: string }>(`/articles/${articleId}/feedback`, payload);
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to submit article feedback.'));
   }
 }

@@ -89,6 +89,11 @@ class Article(Base):
 
     matched_query: Mapped[Query | None] = relationship("Query", back_populates="articles")
     reports: Mapped[list["Report"]] = relationship("Report", secondary=report_articles, back_populates="articles")
+    feedback_entries: Mapped[list["ArticleFeedback"]] = relationship(
+        "ArticleFeedback",
+        back_populates="article",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self) -> str:
         return f"<Article id={self.id} score={self.score} title='{self.title[:40]}'>"
@@ -112,6 +117,20 @@ class Report(Base):
 
     def __repr__(self) -> str:
         return f"<Report id={self.id} date={self.report_date} kept={self.total_articles_kept}>"
+
+
+class ArticleFeedback(Base):
+    """User feedback on article quality/scoring for future model training."""
+
+    __tablename__ = "article_feedback"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    article_id: Mapped[int] = mapped_column(Integer, ForeignKey("articles.id", ondelete="CASCADE"), nullable=False, index=True)
+    feedback_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    user_corrected_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    article: Mapped[Article] = relationship("Article", back_populates="feedback_entries")
 
 
 Index("ix_articles_score", Article.score)

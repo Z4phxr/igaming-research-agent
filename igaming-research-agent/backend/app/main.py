@@ -38,6 +38,7 @@ app.add_middleware(
 
 app.include_router(queries_router.router, prefix="/api/queries", tags=["queries"])
 app.include_router(reports_router.router, prefix="/api/reports", tags=["reports"])
+app.include_router(reports_router.feedback_router, prefix="/api", tags=["reports"])
 
 
 @app.get("/", tags=["system"])

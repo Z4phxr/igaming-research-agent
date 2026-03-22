@@ -179,3 +179,67 @@ def test_get_report_by_id_show_all_includes_rejected_articles(client, db_session
     assert show_all.status_code == 200
     assert len(filtered.json()["articles"]) == 1
     assert len(show_all.json()["articles"]) == 2
+
+
+def test_post_article_feedback_supports_all_feedback_types(client, db_session, seeded_query):
+    article = Article(
+        title="Feedback target",
+        url="https://example.com/feedback-target",
+        score=6,
+        matched_query_id=seeded_query.id,
+    )
+    report = Report(
+        report_date=datetime.date.today(),
+        total_articles_found=1,
+        total_articles_kept=1,
+        articles=[article],
+    )
+    db_session.add(report)
+    db_session.commit()
+    db_session.refresh(article)
+
+    helpful = client.post(
+        f"/api/articles/{article.id}/feedback",
+        json={"feedback_type": "helpful"},
+    )
+    too_low = client.post(
+        f"/api/articles/{article.id}/feedback",
+        json={"feedback_type": "score_too_low", "user_corrected_score": 8},
+    )
+    too_high = client.post(
+        f"/api/articles/{article.id}/feedback",
+        json={"feedback_type": "score_too_high", "user_corrected_score": 3},
+    )
+
+    assert helpful.status_code == 200
+    assert too_low.status_code == 200
+    assert too_high.status_code == 200
+    assert helpful.json()["message"] == "Thank you for the feedback"
+    assert too_low.json()["status"] == "success"
+    assert too_high.json()["status"] == "success"
+
+
+def test_post_article_feedback_validates_score_range(client, db_session, seeded_query):
+    article = Article(
+        title="Feedback validation target",
+        url="https://example.com/feedback-validation",
+        score=6,
+        matched_query_id=seeded_query.id,
+    )
+    report = Report(
+        report_date=datetime.date.today(),
+        total_articles_found=1,
+        total_articles_kept=1,
+        articles=[article],
+    )
+    db_session.add(report)
+    db_session.commit()
+    db_session.refresh(article)
+
+    response = client.post(
+        f"/api/articles/{article.id}/feedback",
+        json={"feedback_type": "score_too_low", "user_corrected_score": 11},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "user_corrected_score must be between 1 and 10"

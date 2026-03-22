@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import ScoreCorrectionModal from '@/components/ScoreCorrectionModal';
+import { submitArticleFeedback } from '@/services/api';
 import type { Article } from '@/types';
 
 interface Props {
@@ -7,6 +10,11 @@ interface Props {
 
 // TODO: Add score color scale and richer metadata chips.
 export default function ArticleCard({ article, rejected = false }: Props) {
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [feedbackError, setFeedbackError] = useState('');
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalType, setModalType] = useState<'score_too_low' | 'score_too_high'>('score_too_low');
+
   const score = Number(article.score ?? 0);
   const tags = (article.tags || '')
     .split(',')
@@ -16,6 +24,31 @@ export default function ArticleCard({ article, rejected = false }: Props) {
   const rejectionLabel = article.rejection_reason === 'failed_relevance_filter'
     ? 'Rejected: failed relevance filter'
     : `Rejected: low score (${score}/10)`;
+
+  const submitHelpful = async (): Promise<void> => {
+    setFeedbackError('');
+    try {
+      const response = await submitArticleFeedback(article.id, 'helpful');
+      setFeedbackMessage(response.message);
+      setTimeout(() => setFeedbackMessage(''), 1200);
+    } catch (error) {
+      setFeedbackError(error instanceof Error ? error.message : 'Feedback failed');
+    }
+  };
+
+  const openCorrection = (type: 'score_too_low' | 'score_too_high'): void => {
+    setFeedbackError('');
+    setFeedbackMessage('');
+    setModalType(type);
+    setModalOpen(true);
+  };
+
+  const submitCorrection = async (correctedScore: number): Promise<void> => {
+    await submitArticleFeedback(article.id, modalType, correctedScore);
+    setFeedbackMessage("Thanks! We'll learn from this.");
+    setFeedbackError('');
+    setTimeout(() => setFeedbackMessage(''), 1500);
+  };
 
   return (
     <article
@@ -82,6 +115,43 @@ export default function ArticleCard({ article, rejected = false }: Props) {
       >
         Read source
       </a>
+
+      <div className="flex items-center gap-2 pt-1">
+        <button
+          type="button"
+          className="h-8 w-8 rounded-md bg-[#555555] text-white transition-colors hover:bg-[#2563eb]"
+          aria-label="feedback-helpful"
+          onClick={() => void submitHelpful()}
+        >
+          👍
+        </button>
+        <button
+          type="button"
+          className="h-8 w-8 rounded-md bg-[#555555] text-white transition-colors hover:bg-[#2563eb]"
+          aria-label="feedback-score-too-low"
+          onClick={() => openCorrection('score_too_low')}
+        >
+          ⬆️
+        </button>
+        <button
+          type="button"
+          className="h-8 w-8 rounded-md bg-[#555555] text-white transition-colors hover:bg-[#2563eb]"
+          aria-label="feedback-score-too-high"
+          onClick={() => openCorrection('score_too_high')}
+        >
+          ⬇️
+        </button>
+      </div>
+
+      {feedbackMessage && <p className="text-xs text-[#16a34a]">{feedbackMessage}</p>}
+      {feedbackError && <p className="text-xs text-[#dc2626]">{feedbackError}</p>}
+
+      <ScoreCorrectionModal
+        open={modalOpen}
+        currentScore={score}
+        onClose={() => setModalOpen(false)}
+        onSubmit={submitCorrection}
+      />
     </article>
   );
 }

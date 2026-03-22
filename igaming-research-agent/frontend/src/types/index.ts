@@ -48,3 +48,12 @@ export interface UpdateQueryDto {
   description?: string;
   is_active?: boolean;
 }
+
+export type FeedbackType = 'helpful' | 'score_too_low' | 'score_too_high';
+
+export interface ArticleFeedback {
+  article_id: number;
+  feedback_type: FeedbackType;
+  user_corrected_score: number | null;
+  created_at: string;
+}
