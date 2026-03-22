@@ -57,23 +57,57 @@ export default function ArticleCard({ article, rejected = false }: Props) {
       } border-[#222222]`}
     >
       <div className="flex items-center justify-between gap-2">
-        <span
-          className={`rounded px-2 py-1 font-mono text-xs ${
-            rejected
-              ? article.rejection_reason === 'failed_relevance_filter'
-                ? 'bg-[#1c0a0a] text-[#dc2626]'
-                : 'bg-[#1f2937] text-[#9ca3af]'
-              : score >= 8
-                ? 'bg-[#14532d] text-[#16a34a]'
-                : 'bg-[#451a03] text-[#d97706]'
-          }`}
-        >
-          {score.toFixed(1)}
-        </span>
+        <div className="flex items-center gap-2">
+          <span
+            className={`rounded px-2 py-1 font-mono text-xs ${
+              rejected
+                ? article.rejection_reason === 'failed_relevance_filter'
+                  ? 'bg-[#1c0a0a] text-[#dc2626]'
+                  : 'bg-[#1f2937] text-[#9ca3af]'
+                : score >= 8
+                  ? 'bg-[#14532d] text-[#16a34a]'
+                  : 'bg-[#451a03] text-[#d97706]'
+            }`}
+          >
+            {score.toFixed(1)}
+          </span>
+
+          <button
+            type="button"
+            className="flex h-8 w-8 items-center justify-center rounded-md bg-[#555555] text-white transition-colors hover:bg-[#2563eb]"
+            aria-label="feedback-helpful"
+            onClick={() => void submitHelpful()}
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M7 11v10H4V11h3z" />
+              <path d="M7 11l4-8h2a2 2 0 0 1 2 2v4h4a2 2 0 0 1 2 2l-1 8a2 2 0 0 1-2 2H7" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="flex h-8 w-8 items-center justify-center rounded-md bg-[#555555] text-white transition-colors hover:bg-[#2563eb]"
+            aria-label="feedback-score-too-low"
+            onClick={() => openCorrection('score_too_low')}
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 19V5" />
+              <path d="M6 11l6-6 6 6" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="flex h-8 w-8 items-center justify-center rounded-md bg-[#555555] text-white transition-colors hover:bg-[#2563eb]"
+            aria-label="feedback-score-too-high"
+            onClick={() => openCorrection('score_too_high')}
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 5v14" />
+              <path d="M18 13l-6 6-6-6" />
+            </svg>
+          </button>
+        </div>
         <span className="font-mono text-xs text-[#888888]">
           {article.source_domain || 'unknown source'}
-          {' · '}
-          {article.published_date ? new Date(article.published_date).toLocaleDateString() : 'unknown date'}
         </span>
       </div>
 
@@ -106,42 +140,6 @@ export default function ArticleCard({ article, rejected = false }: Props) {
           ))}
         </div>
       )}
-
-      <a
-        href={article.url}
-        target="_blank"
-        rel="noreferrer"
-        className="text-xs text-[#2563eb] hover:underline"
-      >
-        Read source
-      </a>
-
-      <div className="flex items-center gap-2 pt-1">
-        <button
-          type="button"
-          className="h-8 w-8 rounded-md bg-[#555555] text-white transition-colors hover:bg-[#2563eb]"
-          aria-label="feedback-helpful"
-          onClick={() => void submitHelpful()}
-        >
-          👍
-        </button>
-        <button
-          type="button"
-          className="h-8 w-8 rounded-md bg-[#555555] text-white transition-colors hover:bg-[#2563eb]"
-          aria-label="feedback-score-too-low"
-          onClick={() => openCorrection('score_too_low')}
-        >
-          ⬆️
-        </button>
-        <button
-          type="button"
-          className="h-8 w-8 rounded-md bg-[#555555] text-white transition-colors hover:bg-[#2563eb]"
-          aria-label="feedback-score-too-high"
-          onClick={() => openCorrection('score_too_high')}
-        >
-          ⬇️
-        </button>
-      </div>
 
       {feedbackMessage && <p className="text-xs text-[#16a34a]">{feedbackMessage}</p>}
       {feedbackError && <p className="text-xs text-[#dc2626]">{feedbackError}</p>}

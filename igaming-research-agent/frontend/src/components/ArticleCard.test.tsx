@@ -4,7 +4,7 @@ import ArticleCard from '@/components/ArticleCard';
 
 
 describe('ArticleCard', () => {
-  it('renders article title, summary, score and source link', () => {
+  it('renders article title, summary, score and tags', () => {
     render(
       <ArticleCard
         article={{
@@ -29,9 +29,5 @@ describe('ArticleCard', () => {
     expect(screen.getByText('8.0')).toBeInTheDocument();
     expect(screen.getByText('regulation')).toBeInTheDocument();
     expect(screen.getByText('licensing')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /read source/i })).toHaveAttribute(
-      'href',
-      'https://example.com/article',
-    );
   });
 });

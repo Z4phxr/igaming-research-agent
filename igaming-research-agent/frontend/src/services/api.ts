@@ -129,3 +129,12 @@ export async function submitArticleFeedback(
     throw new Error(getApiErrorMessage(error, 'Failed to submit article feedback.'));
   }
 }
+
+export async function runPipeline(): Promise<{ status: string; message: string; articles_found?: number }> {
+  try {
+    const { data } = await api.post<{ status: string; message: string; articles_found?: number }>('/reports/run');
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to run pipeline.'));
+  }
+}

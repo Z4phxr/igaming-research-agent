@@ -3,6 +3,7 @@ import {
   createQuery,
   deleteQuery,
   getQueries,
+  runPipeline,
   updateQuery,
 } from '@/services/api';
 import type { CreateQueryDto, Query } from '@/types';
@@ -10,6 +11,8 @@ import type { CreateQueryDto, Query } from '@/types';
 export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [runningPipeline, setRunningPipeline] = useState(false);
+  const [pipelineMessage, setPipelineMessage] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [streamType, setStreamType] = useState('legislative');
   const [description, setDescription] = useState('');
@@ -100,9 +103,36 @@ export default function Settings() {
     return 'bg-[#14532d] text-[#16a34a]';
   };
 
+  const handleRunPipeline = async () => {
+    setRunningPipeline(true);
+    setPipelineMessage('');
+    setError('');
+    try {
+      const result = await runPipeline();
+      setPipelineMessage(result.message);
+      await loadQueries();
+    } catch (pipelineError) {
+      setError(pipelineError instanceof Error ? pipelineError.message : 'Unable to run pipeline');
+    } finally {
+      setRunningPipeline(false);
+    }
+  };
+
   return (
     <section className="space-y-5">
-      <h2 className="text-3xl font-semibold text-white">Query Manager</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-3xl font-semibold text-white">Query Manager</h2>
+        <button
+          type="button"
+          onClick={() => void handleRunPipeline()}
+          disabled={runningPipeline}
+          className="rounded-md bg-[#2563eb] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1d4ed8] disabled:opacity-50"
+        >
+          {runningPipeline ? 'Running pipeline...' : 'Run Pipeline'}
+        </button>
+      </div>
+
+      {pipelineMessage && <p className="text-sm text-[#16a34a]">{pipelineMessage}</p>}
 
       <form onSubmit={submit} className="max-w-3xl space-y-4 rounded-lg border border-[#222222] bg-[#111111] p-5">
         <div>
