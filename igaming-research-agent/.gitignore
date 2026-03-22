@@ -1,0 +1,24 @@
+# TODO: Add any additional ignore rules specific to your local setup.
+
+# Python backend
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.sqlite3
+*.db
+.venv/
+venv/
+.env
+
+# Node frontend
+node_modules/
+dist/
+.vite/
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

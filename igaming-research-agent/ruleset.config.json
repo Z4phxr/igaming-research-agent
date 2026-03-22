@@ -1,0 +1,137 @@
+{
+  "project": {
+    "name": "igaming-research-agent",
+    "description": "Automated daily iGaming news research system for US-focused investor analysis"
+  },
+  "stack": {
+    "backend": {
+      "framework": "FastAPI",
+      "orm": "SQLAlchemy",
+      "database": "SQLite",
+      "scheduler": "APScheduler",
+      "python": ">=3.10"
+    },
+    "frontend": {
+      "framework": "React 18",
+      "language": "TypeScript",
+      "bundler": "Vite",
+      "styling": "TailwindCSS",
+      "httpClient": "Axios",
+      "routing": "React Router v6"
+    }
+  },
+  "paths": {
+    "requiredRoot": "igaming-research-agent",
+    "databaseFile": "backend/data.db",
+    "backend": {
+      "app": "backend/app",
+      "main": "backend/app/main.py",
+      "database": "backend/app/database.py",
+      "models": "backend/app/models.py",
+      "schemas": "backend/app/schemas.py",
+      "config": "backend/app/config.py",
+      "api": {
+        "queries": "backend/app/api/queries.py",
+        "reports": "backend/app/api/reports.py"
+      },
+      "services": {
+        "scheduler": "backend/app/services/scheduler.py",
+        "search": "backend/app/services/search.py",
+        "scraper": "backend/app/services/scraper.py",
+        "analyzer": "backend/app/services/analyzer.py"
+      }
+    },
+    "frontend": {
+      "app": "frontend/src/App.tsx",
+      "main": "frontend/src/main.tsx",
+      "types": "frontend/src/types/index.ts",
+      "api": "frontend/src/services/api.ts",
+      "components": {
+        "articleCard": "frontend/src/components/ArticleCard.tsx",
+        "navbar": "frontend/src/components/Navbar.tsx"
+      },
+      "pages": {
+        "dashboard": "frontend/src/pages/Dashboard.tsx",
+        "history": "frontend/src/pages/History.tsx",
+        "settings": "frontend/src/pages/Settings.tsx"
+      }
+    }
+  },
+  "rules": {
+    "scaffolding": {
+      "todoCommentsRequired": true,
+      "todoCommentPolicy": "Every scaffold file should include at least one TODO comment for next implementation step"
+    },
+    "backend": {
+      "cors": {
+        "required": true,
+        "allowedOrigins": [
+          "http://localhost:3000"
+        ],
+        "file": "backend/app/main.py"
+      },
+      "modelsRequired": [
+        "Query",
+        "Article",
+        "Report"
+      ],
+      "queryStreams": [
+        "legislative",
+        "business",
+        "whitelist"
+      ],
+      "serviceResponsibilities": {
+        "search.py": "Read active queries from DB and call Serper API",
+        "scraper.py": "Fetch article full text from URLs",
+        "analyzer.py": "Send article text to LLM for relevance/scoring/summary",
+        "scheduler.py": "Run full daily pipeline using APScheduler"
+      }
+    },
+    "frontend": {
+      "apiBaseUrl": "http://localhost:8000",
+      "note": "If port 8000 is occupied locally, allow temporary override to 8001",
+      "typesRequired": [
+        "Query",
+        "Article",
+        "Report"
+      ]
+    }
+  },
+  "apiContract": {
+    "basePrefix": "/api",
+    "queries": [
+      "GET /api/queries",
+      "POST /api/queries",
+      "PUT /api/queries/{id}",
+      "DELETE /api/queries/{id}"
+    ],
+    "reports": [
+      "GET /api/reports",
+      "GET /api/reports/{id}",
+      "GET /api/reports/date/{date}"
+    ],
+    "system": [
+      "GET /api/health"
+    ]
+  },
+  "schedulerPipeline": [
+    "Load active queries",
+    "Run search API per query",
+    "Scrape full text for returned URLs",
+    "Filter relevance via LLM",
+    "Score and summarize via LLM",
+    "Keep score >= 6",
+    "Sort by score descending",
+    "Create daily report"
+  ],
+  "qualityGates": {
+    "errorTolerance": [
+      "If search API fails, continue with next query",
+      "If scrape fails, skip URL and continue",
+      "If LLM analysis fails for one article, skip and continue",
+      "Scheduler must not crash the service"
+    ],
+    "singleUserMode": true,
+    "authRequired": false
+  }
+}
