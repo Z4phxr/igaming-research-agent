@@ -40,6 +40,12 @@ app.include_router(queries_router.router, prefix="/api/queries", tags=["queries"
 app.include_router(reports_router.router, prefix="/api/reports", tags=["reports"])
 
 
+@app.get("/", tags=["system"])
+def root() -> dict:
+    """Root readiness endpoint for platform-level health probes."""
+    return {"status": "ok", "service": "igaming-research-agent-backend"}
+
+
 @app.get("/api/health", tags=["system"])
 def health() -> dict:
     """Simple health check endpoint.
