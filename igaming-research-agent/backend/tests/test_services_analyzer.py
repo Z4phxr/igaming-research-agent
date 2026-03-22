@@ -28,7 +28,7 @@ def test_module_raises_when_anthropic_key_missing(monkeypatch):
 
 def test_is_relevant_returns_true_for_yes_response(monkeypatch):
     def fake_create(**kwargs):
-        assert kwargs["model"] == "claude-sonnet-4-20250514"
+        assert kwargs["model"] == analyzer._MODEL
         assert kwargs["max_tokens"] == 10
         assert kwargs["temperature"] == 0
         assert kwargs["system"]
@@ -51,7 +51,7 @@ def test_is_relevant_returns_true_for_yes_response(monkeypatch):
 
 def test_score_and_summarize_parses_expected_format(monkeypatch):
     def fake_create(**kwargs):
-        assert kwargs["model"] == "claude-sonnet-4-20250514"
+        assert kwargs["model"] == analyzer._MODEL
         assert kwargs["max_tokens"] == 200
         assert kwargs["temperature"] == 0
         assert kwargs["system"]
