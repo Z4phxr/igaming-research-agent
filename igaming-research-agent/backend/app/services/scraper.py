@@ -23,51 +23,64 @@ def fetch_article_text(url: str) -> Optional[dict]:
     Returns a dict with `url`, `full_text`, and `source_domain` on success.
     Returns None when fetching or extraction fails.
     """
+    primary_error: str | None = None
+
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()
-    except requests.Timeout as exc:
-        logger.warning("Failed scraping url=%s error_type=Timeout error=%s", url, exc)
-        return None
-    except requests.ConnectionError as exc:
-        logger.warning("Failed scraping url=%s error_type=ConnectionError error=%s", url, exc)
-        return None
-    except requests.HTTPError as exc:
-        logger.warning("Failed scraping url=%s error_type=HTTPError error=%s", url, exc)
-        return None
-    except requests.RequestException as exc:
-        logger.warning("Failed scraping url=%s error_type=RequestException error=%s", url, exc)
-        return None
-    except Exception as exc:
-        logger.warning("Failed scraping url=%s error_type=Exception error=%s", url, exc)
-        return None
 
-    if trafilatura is None:
+        if trafilatura is None:
+            primary_error = "trafilatura is not installed"
+        else:
+            full_text = trafilatura.extract(response.text, include_comments=False)
+            if full_text is None:
+                primary_error = "trafilatura returned None"
+            elif not full_text.strip():
+                primary_error = "extraction returned empty string"
+            else:
+                return {
+                    "url": url,
+                    "full_text": full_text,
+                    "source_domain": extract_source_domain(url),
+                }
+    except requests.Timeout as exc:
+        primary_error = f"Timeout: {exc}"
+    except requests.ConnectionError as exc:
+        primary_error = f"ConnectionError: {exc}"
+    except requests.HTTPError as exc:
+        primary_error = f"HTTPError: {exc}"
+    except requests.RequestException as exc:
+        primary_error = f"RequestException: {exc}"
+    except Exception as exc:
+        primary_error = f"Exception: {exc}"
+
+    logger.info("Using Jina fallback for %s", url)
+    try:
+        jina_url = f"https://r.jina.ai/{url}"
+        response = requests.get(jina_url, timeout=15)
+        response.raise_for_status()
+        extracted_text = response.text
+        if extracted_text and extracted_text.strip():
+            return {
+                "url": url,
+                "full_text": extracted_text.strip(),
+                "source_domain": extract_source_domain(url),
+            }
+    except Exception as exc:
         logger.warning(
-            "Failed extracting url=%s error_type=MissingDependency error=trafilatura is not installed",
+            "Failed scraping url=%s primary_error=%s jina_error=%s",
             url,
+            primary_error or "unknown primary error",
+            exc,
         )
         return None
 
-    try:
-        full_text = trafilatura.extract(response.text, include_comments=False)
-    except Exception as exc:
-        logger.warning("Failed extracting url=%s error_type=TrafilaturaException error=%s", url, exc)
-        return None
-
-    if full_text is None:
-        logger.warning("Failed extracting url=%s error_type=UnreadableContent error=trafilatura returned None", url)
-        return None
-
-    if not full_text.strip():
-        logger.warning("Failed extracting url=%s error_type=EmptyContent error=extraction returned empty string", url)
-        return None
-
-    return {
-        "url": url,
-        "full_text": full_text,
-        "source_domain": extract_source_domain(url),
-    }
+    logger.warning(
+        "Failed scraping url=%s primary_error=%s jina_error=empty response",
+        url,
+        primary_error or "unknown primary error",
+    )
+    return None
 
 
 def extract_source_domain(url: str) -> str:

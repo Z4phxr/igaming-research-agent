@@ -44,7 +44,7 @@ def test_fetch_article_text_returns_none_on_request_error(monkeypatch):
     assert text is None
 
 
-def test_fetch_article_text_returns_none_when_extraction_none(monkeypatch):
+def test_fetch_article_text_uses_jina_fallback_when_extraction_none(monkeypatch):
     monkeypatch.setattr(scraper.requests, "get", lambda url, timeout: MockResponse())
 
     class FakeTrafilatura:
@@ -56,7 +56,9 @@ def test_fetch_article_text_returns_none_when_extraction_none(monkeypatch):
 
     text = scraper.fetch_article_text("https://example.com/unreadable")
 
-    assert text is None
+    assert text is not None
+    assert text["url"] == "https://example.com/unreadable"
+    assert text["source_domain"] == "example.com"
 
 
 def test_extract_source_domain():
