@@ -72,6 +72,10 @@ class Article(Base):
     summary: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     full_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    raw_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    passed_relevance_filter: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    kept: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    rejection_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
     tags: Mapped[str | None] = mapped_column(String(512), nullable=True)
     matched_query_id: Mapped[int | None] = mapped_column(
         Integer,

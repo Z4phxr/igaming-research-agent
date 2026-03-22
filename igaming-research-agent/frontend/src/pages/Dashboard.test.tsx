@@ -19,6 +19,9 @@ describe('Dashboard', () => {
           url: 'https://example.com/policy',
           summary: 'Important summary',
           score: 8,
+          kept: true,
+          rejection_reason: null,
+          passed_relevance_filter: true,
           tags: 'regulation',
           source_domain: 'example.com',
           published_date: '2026-03-22T00:00:00Z',
@@ -29,12 +32,12 @@ describe('Dashboard', () => {
 
     render(<Dashboard />);
 
-    expect(screen.getByRole('heading', { name: /today's report/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /daily intelligence report/i })).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getByText(/report date: 2026-03-22/i)).toBeInTheDocument();
-      expect(screen.getByText(/total screened:/i)).toBeInTheDocument();
-      expect(screen.getByText(/total kept:/i)).toBeInTheDocument();
+      expect(screen.getByText(/articles screened/i)).toBeInTheDocument();
+      expect(screen.getByText(/articles kept/i)).toBeInTheDocument();
+      expect(screen.getByText(/pipeline run/i)).toBeInTheDocument();
       expect(screen.getByText(/policy shift/i)).toBeInTheDocument();
     });
   });

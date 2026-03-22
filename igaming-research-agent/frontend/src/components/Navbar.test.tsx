@@ -12,7 +12,7 @@ describe('Navbar', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('link', { name: /home/i })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: /dashboard/i })).toHaveAttribute('href', '/');
     expect(screen.getByRole('link', { name: /history/i })).toHaveAttribute('href', '/history');
     expect(screen.getByRole('link', { name: /settings/i })).toHaveAttribute('href', '/settings');
   });

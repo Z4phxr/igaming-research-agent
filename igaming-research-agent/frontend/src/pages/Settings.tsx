@@ -95,34 +95,34 @@ export default function Settings() {
   };
 
   const badgeClass = (type: string): string => {
-    if (type === 'legislative') return 'bg-blue-100 text-blue-700';
-    if (type === 'business') return 'bg-emerald-100 text-emerald-700';
-    return 'bg-amber-100 text-amber-700';
+    if (type === 'legislative') return 'bg-[#1e3a5f] text-[#2563eb]';
+    if (type === 'business') return 'bg-[#1e1b4b] text-[#6366f1]';
+    return 'bg-[#14532d] text-[#16a34a]';
   };
 
   return (
-    <section className="space-y-4">
-      <h2 className="text-2xl font-bold">Settings / Query Manager</h2>
+    <section className="space-y-5">
+      <h2 className="text-3xl font-semibold text-white">Query Manager</h2>
 
-      <form onSubmit={submit} className="bg-white border rounded p-4 space-y-3 max-w-2xl">
+      <form onSubmit={submit} className="max-w-3xl space-y-4 rounded-lg border border-[#222222] bg-[#111111] p-5">
         <div>
-          <label htmlFor="searchTerm" className="block text-sm mb-1">Search query</label>
+          <label htmlFor="searchTerm" className="mb-1 block text-[12px] uppercase tracking-[0.05em] text-[#888888]">Search query</label>
           <input
             id="searchTerm"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             required
-            className="w-full border rounded px-3 py-2 text-sm"
+            className="w-full rounded-md border border-[#333333] bg-[#0a0a0a] px-3.5 py-2.5 text-sm text-white outline-none transition-colors focus:border-[#2563eb]"
           />
         </div>
 
         <div>
-          <label htmlFor="streamType" className="block text-sm mb-1">Stream type</label>
+          <label htmlFor="streamType" className="mb-1 block text-[12px] uppercase tracking-[0.05em] text-[#888888]">Stream type</label>
           <select
             id="streamType"
             value={streamType}
             onChange={(e) => setStreamType(e.target.value)}
-            className="w-full border rounded px-3 py-2 text-sm"
+            className="w-full rounded-md border border-[#333333] bg-[#0a0a0a] px-3.5 py-2.5 text-sm text-white outline-none transition-colors focus:border-[#2563eb]"
           >
             <option value="legislative">Legislative</option>
             <option value="business">Business</option>
@@ -131,16 +131,16 @@ export default function Settings() {
         </div>
 
         <div>
-          <label htmlFor="description" className="block text-sm mb-1">Description</label>
+          <label htmlFor="description" className="mb-1 block text-[12px] uppercase tracking-[0.05em] text-[#888888]">Description</label>
           <input
             id="description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="w-full border rounded px-3 py-2 text-sm"
+            className="w-full rounded-md border border-[#333333] bg-[#0a0a0a] px-3.5 py-2.5 text-sm text-white outline-none transition-colors focus:border-[#2563eb]"
           />
         </div>
 
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex items-center gap-2 text-sm text-[#888888]">
           <input
             type="checkbox"
             checked={isActive}
@@ -149,49 +149,71 @@ export default function Settings() {
           Active
         </label>
 
-        {error && <p className="text-red-600 text-sm">{error}</p>}
+        {error && <p className="text-sm text-[#dc2626]">{error}</p>}
 
-        <button className="bg-blue-600 text-white text-sm px-4 py-2 rounded disabled:opacity-50" type="submit" disabled={saving}>
+        <button
+          className="rounded-md bg-[#2563eb] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1d4ed8] disabled:opacity-50"
+          type="submit"
+          disabled={saving}
+        >
           {saving ? 'Saving...' : 'Add Query'}
         </button>
       </form>
 
-      <div className="bg-white border rounded p-4 text-sm text-gray-600">
+      <div className="overflow-hidden rounded-lg border border-[#222222] bg-[#111111]">
         {loading ? (
-          <p>Loading queries...</p>
+          <div className="loading-block">
+            <span className="spinner" />
+            <span>Loading queries...</span>
+          </div>
         ) : queries.length === 0 ? (
-          <p>No queries yet. Add your first search query above.</p>
+          <div className="empty-state">
+            <div className="empty-state-icon" />
+            <p>No queries yet. Add your first search query above.</p>
+          </div>
         ) : (
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="text-gray-500">
-                <th className="py-2">Search term</th>
-                <th className="py-2">Stream type</th>
-                <th className="py-2">Description</th>
-                <th className="py-2">Active</th>
-                <th className="py-2">Delete</th>
+              <tr className="bg-[#1a1a1a] text-[11px] uppercase tracking-[0.08em] text-[#555555]">
+                <th className="px-4 py-3">Search term</th>
+                <th className="px-4 py-3">Stream type</th>
+                <th className="px-4 py-3">Description</th>
+                <th className="px-4 py-3">Active</th>
+                <th className="px-4 py-3">Delete</th>
               </tr>
             </thead>
             <tbody>
               {queries.map((query) => (
-                <tr key={query.id} className="border-t">
-                  <td className="py-2 pr-2">{query.search_term}</td>
-                  <td className="py-2 pr-2">
+                <tr key={query.id} className="border-b border-[#222222] bg-[#111111] transition-colors hover:bg-[#151515]">
+                  <td className="px-4 py-3 text-white">{query.search_term}</td>
+                  <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded text-xs ${badgeClass(query.stream_type)}`}>
                       {query.stream_type}
                     </span>
                   </td>
-                  <td className="py-2 pr-2">{query.description || '-'}</td>
-                  <td className="py-2 pr-2">
-                    <input
+                  <td className="px-4 py-3 text-[#888888]">{query.description || '-'}</td>
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
                       aria-label={`toggle-${query.id}`}
-                      type="checkbox"
-                      checked={query.is_active}
-                      onChange={(e) => void toggleActive(query, e.target.checked)}
-                    />
+                      onClick={() => void toggleActive(query, !query.is_active)}
+                      className={`h-6 w-11 rounded-full border border-[#333333] p-0.5 transition-colors ${
+                        query.is_active ? 'bg-[#2563eb]' : 'bg-[#1a1a1a]'
+                      }`}
+                    >
+                      <span
+                        className={`block h-4 w-4 rounded-full bg-white transition-transform ${
+                          query.is_active ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
                   </td>
-                  <td className="py-2">
-                    <button type="button" className="text-red-700" onClick={() => void remove(query.id)}>
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      className="text-[#555555] transition-colors hover:text-[#dc2626]"
+                      onClick={() => void remove(query.id)}
+                    >
                       Delete
                     </button>
                   </td>

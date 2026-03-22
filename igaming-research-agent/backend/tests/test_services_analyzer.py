@@ -99,8 +99,9 @@ def test_run_analysis_pipeline_filters_and_sorts(monkeypatch):
 
     result = analyzer.run_analysis_pipeline(articles)
 
-    assert len(result) == 1
-    assert result[0]["url"] == "https://a"
+    assert len(result["final_articles"]) == 1
+    assert result["final_articles"][0]["url"] == "https://a"
+    assert len(result["all_articles"]) == 3
 
 
 def test_is_relevant_article_compat_alias(monkeypatch):

@@ -16,10 +16,14 @@ export interface Article {
   url: string;
   summary: string;
   score: number;
+  raw_score?: number;
   tags: string;
   source_domain: string;
   published_date: string;
   scraped_date: string;
+  kept: boolean;
+  rejection_reason: string | null;
+  passed_relevance_filter: boolean;
 }
 
 export interface Report {

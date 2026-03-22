@@ -34,6 +34,9 @@ describe('types', () => {
           source_domain: 'example.com',
           published_date: '2026-03-22T00:00:00Z',
           scraped_date: '2026-03-22T01:00:00Z',
+          kept: true,
+          rejection_reason: null,
+          passed_relevance_filter: true,
         },
       ],
     };

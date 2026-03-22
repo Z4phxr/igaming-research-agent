@@ -51,10 +51,12 @@ describe('api service', () => {
 
     await getReports();
     await getLatestReport();
+    await getLatestReport(true);
     await getReportById(7);
 
     expect(spy).toHaveBeenCalledWith('/reports');
-    expect(spy).toHaveBeenCalledWith('/reports/latest');
+    expect(spy).toHaveBeenCalledWith('/reports/latest', { params: { show_all: false } });
+    expect(spy).toHaveBeenCalledWith('/reports/latest', { params: { show_all: true } });
     expect(spy).toHaveBeenCalledWith('/reports/7');
     spy.mockRestore();
   });

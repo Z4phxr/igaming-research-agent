@@ -159,16 +159,29 @@ def score_and_summarize(article: dict | str) -> Optional[dict]:
     }
 
 
-def run_analysis_pipeline(articles: list[dict]) -> list[dict]:
-    """Run two-stage relevance and scoring pipeline over scraped articles."""
+def run_analysis_pipeline(articles: list[dict]) -> dict[str, list[dict]]:
+    """Run two-stage relevance/scoring and return kept + all analyzed articles."""
     if not articles:
         logger.info("Analysis pipeline received no articles; nothing to do")
-        return []
+        return {"final_articles": [], "all_articles": []}
 
     relevant_articles: list[dict] = []
+    all_articles: list[dict] = []
+
     for article in articles:
         if is_relevant(article):
             relevant_articles.append(article)
+        else:
+            all_articles.append(
+                {
+                    **article,
+                    "score": 0,
+                    "raw_score": 0,
+                    "passed_relevance_filter": False,
+                    "kept": False,
+                    "rejection_reason": "failed_relevance_filter",
+                }
+            )
 
     logger.info("Analysis stage 1 complete: relevant=%s total=%s", len(relevant_articles), len(articles))
 
@@ -177,11 +190,35 @@ def run_analysis_pipeline(articles: list[dict]) -> list[dict]:
         scored = score_and_summarize(article)
         if scored is not None:
             scored_results.append(scored)
+        else:
+            all_articles.append(
+                {
+                    **article,
+                    "score": 0,
+                    "raw_score": 0,
+                    "passed_relevance_filter": True,
+                    "kept": False,
+                    "rejection_reason": "score_below_threshold",
+                }
+            )
 
     logger.info("Analysis stage 2 complete: scored_successfully=%s", len(scored_results))
 
     before_score_filter = len(scored_results)
-    high_impact = [item for item in scored_results if int(item.get("score", 0)) >= 6]
+    high_impact: list[dict] = []
+    for item in scored_results:
+        score = int(item.get("score", 0))
+        enriched = {
+            **item,
+            "raw_score": score,
+            "passed_relevance_filter": True,
+            "kept": score >= 6,
+            "rejection_reason": None if score >= 6 else "score_below_threshold",
+        }
+        all_articles.append(enriched)
+        if score >= 6:
+            high_impact.append(enriched)
+
     dropped_low_score = before_score_filter - len(high_impact)
     logger.info("Analysis score filter complete: dropped_low_score=%s", dropped_low_score)
 
@@ -190,12 +227,12 @@ def run_analysis_pipeline(articles: list[dict]) -> list[dict]:
 
     if not final:
         logger.warning("Analysis pipeline produced no final articles")
-        return []
+        return {"final_articles": [], "all_articles": all_articles}
 
     logger.info("Analysis pipeline complete: final_output=%s", len(final))
 
     # TODO: Pass analyzed results to report persistence service.
-    return final
+    return {"final_articles": final, "all_articles": all_articles}
 
 
 def is_relevant_article(text: str) -> bool:

@@ -13,6 +13,9 @@ describe('ArticleCard', () => {
           url: 'https://example.com/article',
           summary: 'Regulatory momentum continues.',
           score: 8,
+          kept: true,
+          rejection_reason: null,
+          passed_relevance_filter: true,
           tags: 'regulation, licensing',
           source_domain: 'example.com',
           published_date: '2026-03-22T00:00:00Z',
@@ -23,7 +26,7 @@ describe('ArticleCard', () => {
 
     expect(screen.getByText('US iGaming market expands')).toBeInTheDocument();
     expect(screen.getByText('Regulatory momentum continues.')).toBeInTheDocument();
-    expect(screen.getByText('8 / 10')).toBeInTheDocument();
+    expect(screen.getByText('8.0')).toBeInTheDocument();
     expect(screen.getByText('regulation')).toBeInTheDocument();
     expect(screen.getByText('licensing')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /read source/i })).toHaveAttribute(

@@ -9,10 +9,44 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.models import Report as ReportModel
-from app.schemas import ReportOut, ReportSummaryOut
+from app.schemas import ReportSummaryOut
 from app.services.scheduler import run_daily_pipeline
 
 router = APIRouter()
+
+
+def _serialize_report(report: ReportModel, show_all: bool) -> dict:
+    filtered_articles = [
+        article for article in report.articles if show_all or bool(getattr(article, "kept", True))
+    ]
+    return {
+        "id": report.id,
+        "report_date": report.report_date,
+        "total_articles_found": report.total_articles_found,
+        "total_articles_kept": report.total_articles_kept,
+        "generated_at": report.generated_at,
+        "articles": [
+            {
+                "id": article.id,
+                "title": article.title,
+                "url": article.url,
+                "source_domain": article.source_domain,
+                "summary": article.summary,
+                "full_text": article.full_text,
+                "score": article.score,
+                "raw_score": article.raw_score,
+                "passed_relevance_filter": article.passed_relevance_filter,
+                "kept": article.kept,
+                "rejection_reason": article.rejection_reason,
+                "tags": article.tags,
+                "matched_query_id": article.matched_query_id,
+                "published_date": article.published_date,
+                "scraped_date": article.scraped_date,
+                "created_at": article.created_at,
+            }
+            for article in filtered_articles
+        ],
+    }
 
 
 @router.get("", response_model=list[ReportSummaryOut])
@@ -74,8 +108,8 @@ def run_reports_pipeline(db: Session = Depends(get_db)):
     }
 
 
-@router.get("/latest", response_model=ReportOut)
-def get_latest_report(db: Session = Depends(get_db)):
+@router.get("/latest")
+def get_latest_report(show_all: bool = False, db: Session = Depends(get_db)):
     report = (
         db.query(ReportModel)
         .options(selectinload(ReportModel.articles))
@@ -84,11 +118,11 @@ def get_latest_report(db: Session = Depends(get_db)):
     )
     if report is None:
         raise HTTPException(status_code=404, detail="No reports found")
-    return report
+    return _serialize_report(report, show_all=show_all)
 
 
-@router.get("/{report_id}", response_model=ReportOut)
-def get_report(report_id: int, db: Session = Depends(get_db)):
+@router.get("/{report_id}")
+def get_report(report_id: int, show_all: bool = False, db: Session = Depends(get_db)):
     report = (
         db.query(ReportModel)
         .options(selectinload(ReportModel.articles))
@@ -97,4 +131,4 @@ def get_report(report_id: int, db: Session = Depends(get_db)):
     )
     if report is None:
         raise HTTPException(status_code=404, detail="Report not found")
-    return report
+    return _serialize_report(report, show_all=show_all)

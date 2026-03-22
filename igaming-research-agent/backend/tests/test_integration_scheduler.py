@@ -55,7 +55,17 @@ def test_scheduler_pipeline_calls_services_in_order(monkeypatch):
 
     def fake_run_analysis_pipeline(articles):
         calls.append("analyze")
-        return [{**articles[0], "score": 9, "summary": "Good", "tags": "market"}]
+        analyzed = {
+            **articles[0],
+            "score": 9,
+            "raw_score": 9,
+            "summary": "Good",
+            "tags": "market",
+            "passed_relevance_filter": True,
+            "kept": True,
+            "rejection_reason": None,
+        }
+        return {"final_articles": [analyzed], "all_articles": [analyzed]}
 
     monkeypatch.setattr(scheduler, "run_search_pipeline", fake_run_search_pipeline)
     monkeypatch.setattr(scheduler, "scrape_articles", fake_scrape_articles)

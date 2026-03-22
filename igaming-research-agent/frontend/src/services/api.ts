@@ -55,9 +55,11 @@ export async function getReports(): Promise<Report[]> {
   }
 }
 
-export async function getLatestReport(): Promise<Report | null> {
+export async function getLatestReport(showAll: boolean = false): Promise<Report | null> {
   try {
-    const { data } = await api.get<Report>('/reports/latest');
+    const { data } = await api.get<Report>('/reports/latest', {
+      params: { show_all: showAll },
+    });
     return data;
   } catch (error) {
     if (axios.isAxiosError(error) && error.response?.status === 404) {

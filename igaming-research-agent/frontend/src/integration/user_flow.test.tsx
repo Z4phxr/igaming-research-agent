@@ -33,6 +33,9 @@ describe('integration user flow', () => {
             url: 'https://example.com/daily',
             summary: 'summary',
             score: 8,
+            kept: true,
+            rejection_reason: null,
+            passed_relevance_filter: true,
             tags: 'regulation',
             source_domain: 'example.com',
             published_date: '2026-03-22T00:00:00Z',
@@ -78,7 +81,7 @@ describe('integration user flow', () => {
       expect(screen.getByText(/fresh legislative query/i)).toBeInTheDocument();
     });
 
-    await user.click(screen.getByRole('link', { name: /home/i }));
+    await user.click(screen.getByRole('link', { name: /dashboard/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/daily summary article/i)).toBeInTheDocument();

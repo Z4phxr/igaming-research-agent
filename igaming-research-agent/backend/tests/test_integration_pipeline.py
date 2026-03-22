@@ -24,7 +24,32 @@ def test_full_pipeline_saves_analyzed_article(monkeypatch):
     monkeypatch.setattr(
         scheduler,
         "run_analysis_pipeline",
-        lambda articles: [{**articles[0], "score": 8, "summary": "Relevant", "tags": "legislation"}],
+        lambda articles: {
+            "final_articles": [
+                {
+                    **articles[0],
+                    "score": 8,
+                    "raw_score": 8,
+                    "summary": "Relevant",
+                    "tags": "legislation",
+                    "passed_relevance_filter": True,
+                    "kept": True,
+                    "rejection_reason": None,
+                }
+            ],
+            "all_articles": [
+                {
+                    **articles[0],
+                    "score": 8,
+                    "raw_score": 8,
+                    "summary": "Relevant",
+                    "tags": "legislation",
+                    "passed_relevance_filter": True,
+                    "kept": True,
+                    "rejection_reason": None,
+                }
+            ],
+        },
     )
 
     scheduler.run_daily_pipeline()

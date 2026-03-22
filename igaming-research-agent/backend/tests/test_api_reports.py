@@ -104,3 +104,78 @@ def test_get_reports_latest_returns_404_when_no_reports_exist(client):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "No reports found"
+
+
+def test_get_reports_latest_show_all_includes_rejected_articles(client, db_session, seeded_query):
+    kept_article = Article(
+        title="Kept article",
+        url="https://example.com/kept",
+        score=8,
+        kept=True,
+        passed_relevance_filter=True,
+        rejection_reason=None,
+        matched_query_id=seeded_query.id,
+    )
+    rejected_article = Article(
+        title="Rejected article",
+        url="https://example.com/rejected",
+        score=2,
+        kept=False,
+        passed_relevance_filter=False,
+        rejection_reason="failed_relevance_filter",
+        matched_query_id=seeded_query.id,
+    )
+    report = Report(
+        report_date=datetime.date.today(),
+        total_articles_found=2,
+        total_articles_kept=1,
+        articles=[kept_article, rejected_article],
+    )
+    db_session.add(report)
+    db_session.commit()
+
+    filtered = client.get("/api/reports/latest")
+    show_all = client.get("/api/reports/latest?show_all=true")
+
+    assert filtered.status_code == 200
+    assert show_all.status_code == 200
+    assert len(filtered.json()["articles"]) == 1
+    assert len(show_all.json()["articles"]) == 2
+
+
+def test_get_report_by_id_show_all_includes_rejected_articles(client, db_session, seeded_query):
+    kept_article = Article(
+        title="Kept article",
+        url="https://example.com/kept-2",
+        score=7,
+        kept=True,
+        passed_relevance_filter=True,
+        rejection_reason=None,
+        matched_query_id=seeded_query.id,
+    )
+    rejected_article = Article(
+        title="Rejected article",
+        url="https://example.com/rejected-2",
+        score=3,
+        kept=False,
+        passed_relevance_filter=True,
+        rejection_reason="score_below_threshold",
+        matched_query_id=seeded_query.id,
+    )
+    report = Report(
+        report_date=datetime.date.today(),
+        total_articles_found=2,
+        total_articles_kept=1,
+        articles=[kept_article, rejected_article],
+    )
+    db_session.add(report)
+    db_session.commit()
+    db_session.refresh(report)
+
+    filtered = client.get(f"/api/reports/{report.id}")
+    show_all = client.get(f"/api/reports/{report.id}?show_all=true")
+
+    assert filtered.status_code == 200
+    assert show_all.status_code == 200
+    assert len(filtered.json()["articles"]) == 1
+    assert len(show_all.json()["articles"]) == 2

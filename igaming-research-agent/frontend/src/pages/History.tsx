@@ -41,33 +41,36 @@ export default function History() {
 
   return (
     <section className="space-y-4">
-      <h2 className="text-2xl font-bold">Report History</h2>
+      <h2 className="text-3xl font-semibold text-white">Report History</h2>
 
-      {loading && <p className="text-sm text-gray-600">Loading report history...</p>}
-      {!loading && error && <p className="text-sm text-red-600">Failed to load report. Please try again.</p>}
+      {loading && (
+        <div className="loading-block">
+          <span className="spinner" />
+          <span>Loading report history...</span>
+        </div>
+      )}
+      {!loading && error && <p className="text-sm text-[#dc2626]">Failed to load report. Please try again.</p>}
 
-      <div className="bg-white border rounded p-4 text-sm text-gray-600">
+      <div className="overflow-hidden rounded-lg border border-[#222222] bg-[#111111]">
         {!loading && !error && reports.length === 0 ? (
-          <p>No report history yet.</p>
+          <div className="empty-state">
+            <div className="empty-state-icon" />
+            <p>No report history yet.</p>
+          </div>
         ) : (
           <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="text-gray-500">
-                <th className="py-2">Report date</th>
-                <th className="py-2">Kept</th>
-                <th className="py-2">Screened</th>
-              </tr>
-            </thead>
             <tbody>
               {reports.map((report) => (
                 <tr
                   key={report.id}
-                  className="cursor-pointer border-t hover:bg-gray-50"
+                  className="cursor-pointer border-b border-[#222222] bg-[#111111] transition-colors hover:bg-[#151515]"
                   onClick={() => void handleSelectReport(report.id)}
                 >
-                  <td className="py-2">{report.report_date}</td>
-                  <td className="py-2">{report.total_articles_kept ?? 0}</td>
-                  <td className="py-2">{report.total_articles_found ?? 0}</td>
+                  <td className="px-4 py-4 font-mono text-white">{report.report_date}</td>
+                  <td className="px-4 py-4 text-[#888888]">
+                    {report.total_articles_kept ?? 0} articles kept / {report.total_articles_found ?? 0} screened
+                  </td>
+                  <td className="px-4 py-4 text-right text-[#2563eb] hover:underline">View Report</td>
                 </tr>
               ))}
             </tbody>
@@ -75,14 +78,26 @@ export default function History() {
         )}
       </div>
 
-      {detailLoading && <p className="text-sm text-gray-600">Loading report details...</p>}
+      {detailLoading && (
+        <div className="loading-block">
+          <span className="spinner" />
+          <span>Loading report details...</span>
+        </div>
+      )}
 
       {selectedReport && !detailLoading && (
         <div className="space-y-3">
-          <h3 className="text-lg font-semibold">Report {selectedReport.report_date}</h3>
+          <button
+            type="button"
+            className="text-sm text-[#888888] transition-colors hover:text-white"
+            onClick={() => setSelectedReport(null)}
+          >
+            ← Back to history
+          </button>
+          <h3 className="font-mono text-lg font-semibold text-white">Report {selectedReport.report_date}</h3>
           <div className="grid gap-3 md:grid-cols-2">
             {selectedReport.articles.map((article) => (
-              <ArticleCard key={article.id} article={article} />
+              <ArticleCard key={article.id} article={article} rejected={!article.kept} />
             ))}
           </div>
         </div>

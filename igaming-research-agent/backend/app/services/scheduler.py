@@ -45,13 +45,15 @@ def run_daily_pipeline(db: Session | None = None) -> None:
         if not scraped_articles:
             logger.warning("Daily pipeline scrape returned no articles")
 
-        final_articles = run_analysis_pipeline(scraped_articles)
+        analysis_result = run_analysis_pipeline(scraped_articles)
+        final_articles = analysis_result.get("final_articles", [])
+        all_articles = analysis_result.get("all_articles", [])
         logger.info("Daily pipeline step analysis complete: count=%s", len(final_articles))
         if not final_articles:
             logger.warning("Daily pipeline analysis returned no final articles")
 
         persisted_articles: list[Article] = []
-        for item in final_articles:
+        for item in all_articles:
             url = str(item.get("url", "")).strip()
             if not url:
                 continue
@@ -61,9 +63,15 @@ def run_daily_pipeline(db: Session | None = None) -> None:
                 # Refresh mutable fields when URL already exists.
                 existing.title = str(item.get("title") or existing.title)
                 existing.source_domain = str(item.get("source_domain") or existing.source_domain)
-                existing.summary = str(item.get("summary") or existing.summary)
+                existing.summary = str(item.get("summary") or item.get("snippet") or existing.summary)
                 existing.full_text = str(item.get("full_text") or existing.full_text)
                 existing.score = int(item.get("score", existing.score or 0))
+                existing.raw_score = int(item.get("raw_score", existing.raw_score or 0))
+                existing.passed_relevance_filter = bool(
+                    item.get("passed_relevance_filter", existing.passed_relevance_filter)
+                )
+                existing.kept = bool(item.get("kept", existing.kept))
+                existing.rejection_reason = item.get("rejection_reason")
                 existing.tags = str(item.get("tags") or existing.tags)
                 existing.scraped_date = datetime.datetime.utcnow()
                 persisted_articles.append(existing)
@@ -73,9 +81,13 @@ def run_daily_pipeline(db: Session | None = None) -> None:
                 title=str(item.get("title") or "Untitled"),
                 url=url,
                 source_domain=str(item.get("source_domain") or ""),
-                summary=str(item.get("summary") or ""),
+                summary=str(item.get("summary") or item.get("snippet") or ""),
                 full_text=str(item.get("full_text") or ""),
                 score=int(item.get("score", 0)),
+                raw_score=int(item.get("raw_score", item.get("score", 0))),
+                passed_relevance_filter=bool(item.get("passed_relevance_filter", True)),
+                kept=bool(item.get("kept", int(item.get("score", 0)) >= 6)),
+                rejection_reason=item.get("rejection_reason"),
                 tags=str(item.get("tags") or ""),
                 matched_query_id=item.get("matched_query_id"),
                 scraped_date=datetime.datetime.utcnow(),
@@ -88,7 +100,7 @@ def run_daily_pipeline(db: Session | None = None) -> None:
         report = Report(
             report_date=datetime.date.today(),
             total_articles_found=len(raw_articles),
-            total_articles_kept=len(final_articles),
+            total_articles_kept=sum(1 for item in all_articles if item.get("kept")),
             generated_at=datetime.datetime.utcnow(),
             articles=persisted_articles,
         )
