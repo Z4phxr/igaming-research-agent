@@ -1,9 +1,12 @@
 """Discover company release links from configured source pages."""
 
 import datetime
+import email.utils
 import logging
+import random
 import re
 import time
+import xml.etree.ElementTree as ET
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -52,6 +55,171 @@ def _new_source_stats(source: ReleaseSource) -> dict:
 def _increment_failure_reason(stats: dict, reason: str) -> None:
     failed_by_reason = stats["failed_by_reason"]
     failed_by_reason[reason] = int(failed_by_reason.get(reason, 0)) + 1
+
+
+def _should_quarantine(error_kind: str) -> bool:
+    return error_kind in {"timeout", "connection_error", "http_403", "http_429", "ssl_error"}
+
+
+def _rate_limit_guard(
+    domain: str,
+    source: ReleaseSource,
+    state: dict,
+    now_utc: datetime.datetime,
+) -> tuple[bool, str]:
+    entry = state.setdefault(
+        domain,
+        {
+            "window_start": now_utc,
+            "count": 0,
+            "last_request_monotonic": 0.0,
+        },
+    )
+
+    if (now_utc - entry["window_start"]) >= datetime.timedelta(hours=1):
+        entry["window_start"] = now_utc
+        entry["count"] = 0
+
+    max_per_hour = int(getattr(source, "max_requests_per_hour", settings.release_domain_default_hourly_limit) or 1)
+    max_per_hour = max(1, max_per_hour)
+    if entry["count"] >= max_per_hour:
+        return False, "local_rate_limit"
+
+    delay_seconds = int(getattr(source, "crawl_delay_seconds", settings.release_domain_default_crawl_delay_seconds) or 0)
+    delay_seconds = max(0, delay_seconds)
+    now_monotonic = time.perf_counter()
+    elapsed = now_monotonic - float(entry["last_request_monotonic"])
+    jitter = random.uniform(0.0, max(0.0, settings.release_request_jitter_seconds))
+    required_wait = float(delay_seconds) + jitter
+    if elapsed < required_wait:
+        time.sleep(required_wait - elapsed)
+
+    entry["count"] += 1
+    entry["last_request_monotonic"] = time.perf_counter()
+    return True, "ok"
+
+
+def _mark_source_failure(source: ReleaseSource, reason: str, now_utc: datetime.datetime) -> None:
+    current_failures = int(getattr(source, "consecutive_failures", 0) or 0) + 1
+    source.consecutive_failures = current_failures
+    source.last_failure_reason = reason
+    source.health_score = max(0, int(getattr(source, "health_score", 100) or 100) - 8)
+
+    threshold = max(1, settings.release_quarantine_failure_threshold)
+    if current_failures >= threshold and _should_quarantine(reason):
+        source.quarantine_until = now_utc + datetime.timedelta(hours=max(1, settings.release_quarantine_hours))
+
+
+def _mark_source_success(source: ReleaseSource, now_utc: datetime.datetime) -> None:
+    source.consecutive_failures = 0
+    source.last_failure_reason = None
+    source.last_success_at = now_utc
+    source.quarantine_until = None
+    source.health_score = min(100, int(getattr(source, "health_score", 100) or 100) + 2)
+
+
+def _is_feed_source(source: ReleaseSource) -> bool:
+    method = str(getattr(source, "preferred_method", "auto") or "auto").lower()
+    if method == "feed":
+        return True
+    if method == "html":
+        return False
+    if not settings.release_enable_feed_first:
+        return False
+    token = (source.source_url or "").lower()
+    return any(part in token for part in ["/feed", "rss", "atom", "xml"])
+
+
+def _discover_from_feed_xml(
+    source: ReleaseSource,
+    xml_text: str,
+    cutoff: datetime.datetime,
+    now_utc: datetime.datetime,
+) -> list[dict]:
+    discovered: list[dict] = []
+    source_domain = urlparse(source.source_url).netloc
+
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return discovered
+
+    items = root.findall(".//item") + root.findall(".//{http://www.w3.org/2005/Atom}entry")
+    for item in items:
+        link_node = item.find("link") or item.find("{http://www.w3.org/2005/Atom}link")
+        href = ""
+        if link_node is not None:
+            href = (link_node.attrib.get("href") or link_node.text or "").strip()
+        if not href:
+            continue
+
+        title_node = item.find("title") or item.find("{http://www.w3.org/2005/Atom}title")
+        title = (title_node.text or "").strip() if title_node is not None else ""
+        date_node = (
+            item.find("pubDate")
+            or item.find("published")
+            or item.find("updated")
+            or item.find("{http://www.w3.org/2005/Atom}published")
+            or item.find("{http://www.w3.org/2005/Atom}updated")
+        )
+        date_raw = (date_node.text or "").strip() if date_node is not None else ""
+        published = _parse_datetime(date_raw)
+        if published is None and date_raw:
+            try:
+                published = email.utils.parsedate_to_datetime(date_raw)
+                if published is not None:
+                    published = _normalize_utc_naive(published)
+            except (TypeError, ValueError):
+                published = None
+
+        if published is None or published < cutoff or published > now_utc:
+            continue
+
+        discovered.append(
+            {
+                "title": title or f"{source.company_name} release",
+                "url": href,
+                "source_domain": source_domain,
+                "summary": f"Release discovered from {source.company_name}",
+                "full_text": "",
+                "score": 0,
+                "raw_score": 0,
+                "passed_relevance_filter": True,
+                "kept": True,
+                "rejection_reason": None,
+                "tags": "release",
+                "matched_query_id": None,
+                "published_date": published,
+                "article_type": "release",
+            }
+        )
+
+    return discovered
+
+
+def _log_page_result(
+    page_name: str,
+    page_url: str,
+    stage: str,
+    result: str,
+    scraped_relevant: int,
+    reason: str,
+    http_status: int | None,
+    duration_ms: int,
+    retries_used: int,
+) -> None:
+    logger.info(
+        "page_result page_name=%s page_url=%s stage=%s result=%s scraped_relevant=%s reason=%s http_status=%s duration_ms=%s retries_used=%s",
+        page_name,
+        page_url,
+        stage,
+        result,
+        scraped_relevant,
+        reason,
+        http_status,
+        duration_ms,
+        retries_used,
+    )
 
 
 def _normalize_utc_naive(value: datetime.datetime) -> datetime.datetime:
@@ -201,16 +369,6 @@ def _fetch_html(
             response = requests.get(url, timeout=timeout, headers=headers)
             response.raise_for_status()
             duration_ms = int((time.perf_counter() - started) * 1000)
-            logger.info(
-                "release_fetch stage=%s status=success source=%s url=%s http_status=%s duration_ms=%s retries_used=%s bytes=%s",
-                stage,
-                source_name,
-                url,
-                response.status_code,
-                duration_ms,
-                attempt,
-                len(response.text or ""),
-            )
             return response.text, {
                 "ok": True,
                 "error_kind": "success",
@@ -227,10 +385,10 @@ def _fetch_html(
             if should_retry:
                 backoff_seconds = settings.release_fetch_backoff_seconds * (2**attempt)
                 logger.info(
-                    "release_fetch stage=%s status=retry source=%s url=%s error_kind=%s http_status=%s attempt=%s attempt_duration_ms=%s backoff_seconds=%.2f",
-                    stage,
+                    "page_retry page_name=%s page_url=%s stage=%s reason=%s http_status=%s attempt=%s attempt_duration_ms=%s backoff_seconds=%.2f",
                     source_name,
                     url,
+                    stage,
                     last_error_kind,
                     last_status_code,
                     attempt + 1,
@@ -243,17 +401,6 @@ def _fetch_html(
             break
 
     duration_ms = int((time.perf_counter() - started) * 1000)
-    logger.info(
-        "release_fetch stage=%s status=failed source=%s url=%s error_kind=%s http_status=%s duration_ms=%s retries_used=%s error=%s",
-        stage,
-        source_name,
-        url,
-        last_error_kind,
-        last_status_code,
-        duration_ms,
-        attempt,
-        last_error_message,
-    )
     return None, {
         "ok": False,
         "error_kind": last_error_kind,
@@ -329,19 +476,167 @@ def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = No
     run_sources_ok = 0
     run_timeouts = 0
     run_blocked = 0
+    run_pages_total = 0
+    run_pages_success = 0
+    run_relevant_pages = 0
+    domain_state: dict[str, dict] = {}
 
     for source in active_sources:
         source_stats = _new_source_stats(source)
+        source_now = now_utc or datetime.datetime.utcnow()
+
+        quarantine_until = getattr(source, "quarantine_until", None)
+        if quarantine_until is not None and quarantine_until > source_now:
+            run_pages_total += 1
+            run_sources_failed += 1
+            source_stats["listing_failed"] = 1
+            source_stats["listing_failure_reason"] = "quarantined"
+            _increment_failure_reason(source_stats, "quarantined")
+            _mark_source_failure(source, "quarantined", source_now)
+            db.add(source)
+            db.commit()
+            _log_page_result(
+                page_name=source.company_name,
+                page_url=source.source_url,
+                stage="listing",
+                result="fail",
+                scraped_relevant=0,
+                reason="quarantined",
+                http_status=None,
+                duration_ms=0,
+                retries_used=0,
+            )
+            _log_source_summary(source_stats)
+            continue
+
+        domain = urlparse(source.source_url).netloc.lower()
+        allowed, guard_reason = _rate_limit_guard(domain, source, domain_state, source_now)
+        if not allowed:
+            run_pages_total += 1
+            run_sources_failed += 1
+            source_stats["listing_failed"] = 1
+            source_stats["listing_failure_reason"] = guard_reason
+            _increment_failure_reason(source_stats, guard_reason)
+            _mark_source_failure(source, guard_reason, source_now)
+            db.add(source)
+            db.commit()
+            _log_page_result(
+                page_name=source.company_name,
+                page_url=source.source_url,
+                stage="listing",
+                result="fail",
+                scraped_relevant=0,
+                reason=guard_reason,
+                http_status=None,
+                duration_ms=0,
+                retries_used=0,
+            )
+            _log_source_summary(source_stats)
+            continue
+
+        if _is_feed_source(source):
+            run_pages_total += 1
+            feed_text, feed_meta = _fetch_html(
+                source.source_url,
+                source_name=source.company_name,
+                stage="feed_fetch",
+                timeout=settings.release_listing_fetch_timeout_seconds,
+            )
+            source.last_listing_checked_at = source_now
+            if not feed_text:
+                reason = str(feed_meta["error_kind"])
+                _mark_source_failure(source, reason, source_now)
+                db.add(source)
+                db.commit()
+
+                source_stats["listing_failed"] = 1
+                source_stats["listing_failure_reason"] = reason
+                _increment_failure_reason(source_stats, reason)
+                _log_page_result(
+                    page_name=source.company_name,
+                    page_url=source.source_url,
+                    stage="feed",
+                    result="fail",
+                    scraped_relevant=0,
+                    reason=reason,
+                    http_status=feed_meta.get("status_code"),
+                    duration_ms=int(feed_meta.get("duration_ms", 0)),
+                    retries_used=int(feed_meta.get("retries_used", 0)),
+                )
+                run_sources_failed += 1
+                if reason == "timeout":
+                    run_timeouts += 1
+                if reason in {"http_403", "http_429"}:
+                    run_blocked += 1
+                _log_source_summary(source_stats)
+                continue
+
+            feed_discovered = _discover_from_feed_xml(source, feed_text, cutoff, source_now)
+            source_stats["listing_ok"] = 1
+            source_stats["accepted"] = len(feed_discovered)
+            run_pages_success += 1
+            if feed_discovered:
+                run_relevant_pages += len(feed_discovered)
+                discovered.extend(feed_discovered)
+                _log_page_result(
+                    page_name=source.company_name,
+                    page_url=source.source_url,
+                    stage="feed",
+                    result="success",
+                    scraped_relevant=len(feed_discovered),
+                    reason="-",
+                    http_status=feed_meta.get("status_code"),
+                    duration_ms=int(feed_meta.get("duration_ms", 0)),
+                    retries_used=int(feed_meta.get("retries_used", 0)),
+                )
+            else:
+                _log_page_result(
+                    page_name=source.company_name,
+                    page_url=source.source_url,
+                    stage="feed",
+                    result="success",
+                    scraped_relevant=0,
+                    reason="no_recent_feed_items",
+                    http_status=feed_meta.get("status_code"),
+                    duration_ms=int(feed_meta.get("duration_ms", 0)),
+                    retries_used=int(feed_meta.get("retries_used", 0)),
+                )
+
+            _mark_source_success(source, source_now)
+            db.add(source)
+            db.commit()
+            run_sources_ok += 1
+            _log_source_summary(source_stats)
+            continue
+
+        run_pages_total += 1
         listing_html, listing_meta = _fetch_html(
             source.source_url,
             source_name=source.company_name,
             stage="listing_fetch",
             timeout=settings.release_listing_fetch_timeout_seconds,
         )
+        source.last_listing_checked_at = source_now
+        source.last_listing_etag = None
+        source.last_listing_modified = None
         if not listing_html:
             source_stats["listing_failed"] = 1
             source_stats["listing_failure_reason"] = listing_meta["error_kind"]
             _increment_failure_reason(source_stats, str(listing_meta["error_kind"]))
+            _mark_source_failure(source, str(listing_meta["error_kind"]), source_now)
+            db.add(source)
+            db.commit()
+            _log_page_result(
+                page_name=source.company_name,
+                page_url=source.source_url,
+                stage="listing",
+                result="fail",
+                scraped_relevant=0,
+                reason=str(listing_meta["error_kind"]),
+                http_status=listing_meta.get("status_code"),
+                duration_ms=int(listing_meta.get("duration_ms", 0)),
+                retries_used=int(listing_meta.get("retries_used", 0)),
+            )
             if listing_meta["error_kind"] == "timeout":
                 run_timeouts += 1
             if listing_meta["error_kind"] in {"http_403", "http_429"}:
@@ -350,6 +645,7 @@ def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = No
             _log_source_summary(source_stats)
             continue
         source_stats["listing_ok"] = 1
+        run_pages_success += 1
 
         source_domain = urlparse(source.source_url).netloc
         source_fetch_budget = max(1, settings.release_max_fetches_per_source)
@@ -376,6 +672,25 @@ def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = No
             seen_urls.add(absolute_url)
             source_stats["candidates_total"] += 1
             source_stats["attempted_article_fetches"] += 1
+            run_pages_total += 1
+            domain = urlparse(absolute_url).netloc.lower()
+            allowed, guard_reason = _rate_limit_guard(domain, source, domain_state, now)
+            if not allowed:
+                source_stats["article_fetch_failed"] += 1
+                _increment_failure_reason(source_stats, guard_reason)
+                _log_page_result(
+                    page_name=source.company_name,
+                    page_url=absolute_url,
+                    stage="article",
+                    result="fail",
+                    scraped_relevant=0,
+                    reason=guard_reason,
+                    http_status=None,
+                    duration_ms=0,
+                    retries_used=0,
+                )
+                continue
+
             article_html, article_meta = _fetch_html(
                 absolute_url,
                 source_name=source.company_name,
@@ -386,32 +701,53 @@ def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = No
                 source_stats["article_fetch_failed"] += 1
                 reason = str(article_meta["error_kind"])
                 _increment_failure_reason(source_stats, reason)
+                _log_page_result(
+                    page_name=source.company_name,
+                    page_url=absolute_url,
+                    stage="article",
+                    result="fail",
+                    scraped_relevant=0,
+                    reason=reason,
+                    http_status=article_meta.get("status_code"),
+                    duration_ms=int(article_meta.get("duration_ms", 0)),
+                    retries_used=int(article_meta.get("retries_used", 0)),
+                )
                 if reason == "timeout":
                     run_timeouts += 1
                 if reason in {"http_403", "http_429"}:
                     run_blocked += 1
                 continue
             source_stats["article_fetch_ok"] += 1
+            run_pages_success += 1
 
             published_date = _extract_published_date(article_html)
             if published_date is None:
                 source_stats["rejected_missing_date"] += 1
-                logger.info(
-                    "release_extract status=rejected reason=missing_published_date source=%s url=%s",
-                    source.company_name,
-                    absolute_url,
+                _log_page_result(
+                    page_name=source.company_name,
+                    page_url=absolute_url,
+                    stage="article",
+                    result="success",
+                    scraped_relevant=0,
+                    reason="missing_published_date",
+                    http_status=article_meta.get("status_code"),
+                    duration_ms=int(article_meta.get("duration_ms", 0)),
+                    retries_used=int(article_meta.get("retries_used", 0)),
                 )
                 continue
 
             if published_date < cutoff or published_date > now:
                 source_stats["rejected_stale_or_future"] += 1
-                logger.info(
-                    "release_extract status=rejected reason=outside_time_window source=%s url=%s published_date=%s cutoff=%s now=%s",
-                    source.company_name,
-                    absolute_url,
-                    published_date.isoformat(),
-                    cutoff.isoformat(),
-                    now.isoformat(),
+                _log_page_result(
+                    page_name=source.company_name,
+                    page_url=absolute_url,
+                    stage="article",
+                    result="success",
+                    scraped_relevant=0,
+                    reason="outside_time_window",
+                    http_status=article_meta.get("status_code"),
+                    duration_ms=int(article_meta.get("duration_ms", 0)),
+                    retries_used=int(article_meta.get("retries_used", 0)),
                 )
                 continue
 
@@ -435,15 +771,51 @@ def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = No
                 }
             )
             source_stats["accepted"] += 1
-            logger.info(
-                "release_extract status=accepted source=%s url=%s published_date=%s title=%s",
-                source.company_name,
-                absolute_url,
-                published_date.isoformat(),
-                title,
+            run_relevant_pages += 1
+            _log_page_result(
+                page_name=source.company_name,
+                page_url=absolute_url,
+                stage="article",
+                result="success",
+                scraped_relevant=1,
+                reason="-",
+                http_status=article_meta.get("status_code"),
+                duration_ms=int(article_meta.get("duration_ms", 0)),
+                retries_used=int(article_meta.get("retries_used", 0)),
+            )
+
+        if source_stats["listing_ok"] == 1 and source_stats["candidates_total"] == 0:
+            _log_page_result(
+                page_name=source.company_name,
+                page_url=source.source_url,
+                stage="listing",
+                result="success",
+                scraped_relevant=0,
+                reason="no_candidate_links",
+                http_status=listing_meta.get("status_code"),
+                duration_ms=int(listing_meta.get("duration_ms", 0)),
+                retries_used=int(listing_meta.get("retries_used", 0)),
+            )
+        elif source_stats["listing_ok"] == 1:
+            _log_page_result(
+                page_name=source.company_name,
+                page_url=source.source_url,
+                stage="listing",
+                result="success",
+                scraped_relevant=source_stats["accepted"],
+                reason="-",
+                http_status=listing_meta.get("status_code"),
+                duration_ms=int(listing_meta.get("duration_ms", 0)),
+                retries_used=int(listing_meta.get("retries_used", 0)),
             )
 
         run_sources_ok += 1
+        if source_stats["listing_failed"] > 0:
+            _mark_source_failure(source, str(source_stats["listing_failure_reason"]), source_now)
+        else:
+            _mark_source_success(source, source_now)
+        db.add(source)
+        db.commit()
         _log_source_summary(source_stats)
 
     logger.info(
@@ -454,5 +826,12 @@ def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = No
         len(discovered),
         run_timeouts,
         run_blocked,
+    )
+    logger.info(
+        "pages_summary success_pages=%s/%s successful_releases=%s/%s",
+        run_pages_success,
+        run_pages_total,
+        run_relevant_pages,
+        run_pages_total,
     )
     return discovered

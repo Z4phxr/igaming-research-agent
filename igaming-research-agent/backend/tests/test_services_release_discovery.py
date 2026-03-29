@@ -106,3 +106,80 @@ def test_discover_recent_releases_source_timeout_is_non_fatal(monkeypatch):
         assert result == []
     finally:
         db.close()
+
+
+def test_discover_recent_releases_skips_quarantined_source(monkeypatch):
+    db = _build_session()
+    try:
+        future = datetime.datetime.utcnow() + datetime.timedelta(hours=2)
+        db.add(
+            ReleaseSource(
+                company_name="Quarantined Source",
+                category="Regulator",
+                source_url="https://q.example.com/news",
+                notes="",
+                is_active=True,
+                quarantine_until=future,
+            )
+        )
+        db.commit()
+
+        called = {"value": False}
+
+        def fake_get(*args, **kwargs):
+            called["value"] = True
+            return _FakeResponse(200, "<html></html>")
+
+        monkeypatch.setattr(release_discovery.requests, "get", fake_get)
+        result = release_discovery.discover_recent_releases(db, now_utc=datetime.datetime.utcnow())
+
+        assert result == []
+        assert called["value"] is False
+    finally:
+        db.close()
+
+
+def test_discover_recent_releases_applies_local_rate_limit(monkeypatch):
+    db = _build_session()
+    try:
+        db.add_all(
+            [
+                ReleaseSource(
+                    company_name="Source One",
+                    category="Operator",
+                    source_url="https://same-domain.example.com/news/one",
+                    notes="",
+                    is_active=True,
+                    max_requests_per_hour=1,
+                    crawl_delay_seconds=0,
+                ),
+                ReleaseSource(
+                    company_name="Source Two",
+                    category="Operator",
+                    source_url="https://same-domain.example.com/news/two",
+                    notes="",
+                    is_active=True,
+                    max_requests_per_hour=1,
+                    crawl_delay_seconds=0,
+                ),
+            ]
+        )
+        db.commit()
+
+        def fake_get(*args, **kwargs):
+            return _FakeResponse(200, "<html><a href='/news-releases/2025/11/release-1.html'>r</a></html>")
+
+        monkeypatch.setattr(release_discovery.requests, "get", fake_get)
+        monkeypatch.setattr(settings, "release_max_links_per_source", 1)
+        monkeypatch.setattr(settings, "release_max_fetches_per_source", 1)
+        monkeypatch.setattr(settings, "release_request_jitter_seconds", 0)
+
+        result = release_discovery.discover_recent_releases(db, now_utc=datetime.datetime.utcnow())
+
+        # Article pages are not fetched (missing meta date), but run should complete and enforce source-level limit.
+        assert isinstance(result, list)
+        sources = db.query(ReleaseSource).order_by(ReleaseSource.id.asc()).all()
+        assert sources[0].last_listing_checked_at is not None
+        assert sources[1].last_failure_reason == "local_rate_limit"
+    finally:
+        db.close()

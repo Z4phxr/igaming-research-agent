@@ -28,6 +28,22 @@ def list_release_sources(db: Session = Depends(get_db)):
                 "category": row.category or "",
                 "source_url": row.source_url or "",
                 "notes": row.notes or "",
+                "source_tier": int(getattr(row, "source_tier", 3) or 3),
+                "preferred_method": str(getattr(row, "preferred_method", "auto") or "auto"),
+                "crawl_delay_seconds": int(getattr(row, "crawl_delay_seconds", 2) or 2),
+                "max_requests_per_hour": int(getattr(row, "max_requests_per_hour", 60) or 60),
+                "consecutive_failures": int(getattr(row, "consecutive_failures", 0) or 0),
+                "health_score": int(getattr(row, "health_score", 100) or 100),
+                "quarantine_until": getattr(row, "quarantine_until", None).isoformat()
+                if getattr(row, "quarantine_until", None)
+                else None,
+                "last_failure_reason": getattr(row, "last_failure_reason", None),
+                "last_success_at": getattr(row, "last_success_at", None).isoformat()
+                if getattr(row, "last_success_at", None)
+                else None,
+                "last_listing_checked_at": getattr(row, "last_listing_checked_at", None).isoformat()
+                if getattr(row, "last_listing_checked_at", None)
+                else None,
                 "is_active": bool(row.is_active),
                 "created_at": (row.created_at or now).isoformat(),
                 "updated_at": (row.updated_at or now).isoformat(),

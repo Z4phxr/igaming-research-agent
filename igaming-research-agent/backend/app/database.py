@@ -396,6 +396,30 @@ def ensure_release_source_runtime_columns() -> None:
         statements.append("ALTER TABLE release_sources ADD COLUMN category VARCHAR(64) NOT NULL DEFAULT ''")
     if "notes" not in existing_columns:
         statements.append("ALTER TABLE release_sources ADD COLUMN notes VARCHAR(1024)")
+    if "source_tier" not in existing_columns:
+        statements.append("ALTER TABLE release_sources ADD COLUMN source_tier INTEGER NOT NULL DEFAULT 3")
+    if "preferred_method" not in existing_columns:
+        statements.append("ALTER TABLE release_sources ADD COLUMN preferred_method VARCHAR(32) NOT NULL DEFAULT 'auto'")
+    if "crawl_delay_seconds" not in existing_columns:
+        statements.append("ALTER TABLE release_sources ADD COLUMN crawl_delay_seconds INTEGER NOT NULL DEFAULT 2")
+    if "max_requests_per_hour" not in existing_columns:
+        statements.append("ALTER TABLE release_sources ADD COLUMN max_requests_per_hour INTEGER NOT NULL DEFAULT 60")
+    if "consecutive_failures" not in existing_columns:
+        statements.append("ALTER TABLE release_sources ADD COLUMN consecutive_failures INTEGER NOT NULL DEFAULT 0")
+    if "health_score" not in existing_columns:
+        statements.append("ALTER TABLE release_sources ADD COLUMN health_score INTEGER NOT NULL DEFAULT 100")
+    if "quarantine_until" not in existing_columns:
+        statements.append("ALTER TABLE release_sources ADD COLUMN quarantine_until TIMESTAMP")
+    if "last_failure_reason" not in existing_columns:
+        statements.append("ALTER TABLE release_sources ADD COLUMN last_failure_reason VARCHAR(64)")
+    if "last_success_at" not in existing_columns:
+        statements.append("ALTER TABLE release_sources ADD COLUMN last_success_at TIMESTAMP")
+    if "last_listing_etag" not in existing_columns:
+        statements.append("ALTER TABLE release_sources ADD COLUMN last_listing_etag VARCHAR(255)")
+    if "last_listing_modified" not in existing_columns:
+        statements.append("ALTER TABLE release_sources ADD COLUMN last_listing_modified VARCHAR(255)")
+    if "last_listing_checked_at" not in existing_columns:
+        statements.append("ALTER TABLE release_sources ADD COLUMN last_listing_checked_at TIMESTAMP")
 
     with engine.begin() as connection:
         for statement in statements:
@@ -405,6 +429,12 @@ def ensure_release_source_runtime_columns() -> None:
         connection.execute(text("UPDATE release_sources SET category = '' WHERE category IS NULL"))
         connection.execute(text("UPDATE release_sources SET notes = '' WHERE notes IS NULL"))
         connection.execute(text("UPDATE release_sources SET is_active = FALSE WHERE is_active IS NULL"))
+        connection.execute(text("UPDATE release_sources SET source_tier = 3 WHERE source_tier IS NULL"))
+        connection.execute(text("UPDATE release_sources SET preferred_method = 'auto' WHERE preferred_method IS NULL"))
+        connection.execute(text("UPDATE release_sources SET crawl_delay_seconds = 2 WHERE crawl_delay_seconds IS NULL OR crawl_delay_seconds < 0"))
+        connection.execute(text("UPDATE release_sources SET max_requests_per_hour = 60 WHERE max_requests_per_hour IS NULL OR max_requests_per_hour < 1"))
+        connection.execute(text("UPDATE release_sources SET consecutive_failures = 0 WHERE consecutive_failures IS NULL OR consecutive_failures < 0"))
+        connection.execute(text("UPDATE release_sources SET health_score = 100 WHERE health_score IS NULL OR health_score < 0"))
         connection.execute(text("UPDATE release_sources SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"))
         connection.execute(text("UPDATE release_sources SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL"))
 

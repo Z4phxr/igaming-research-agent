@@ -89,6 +89,10 @@ class ReleaseSourceBase(BaseModel):
     category: str = Field(..., min_length=1, max_length=64)
     source_url: str = Field(..., min_length=1, max_length=2048)
     notes: Optional[str] = Field(None, max_length=1024)
+    source_tier: int = Field(default=3, ge=1, le=4)
+    preferred_method: str = Field(default="auto", min_length=1, max_length=32)
+    crawl_delay_seconds: int = Field(default=2, ge=0, le=3600)
+    max_requests_per_hour: int = Field(default=60, ge=1, le=10000)
     is_active: bool = True
 
 
@@ -101,11 +105,25 @@ class ReleaseSourceUpdate(BaseModel):
     category: Optional[str] = Field(None, min_length=1, max_length=64)
     source_url: Optional[str] = Field(None, min_length=1, max_length=2048)
     notes: Optional[str] = Field(None, max_length=1024)
+    source_tier: Optional[int] = Field(None, ge=1, le=4)
+    preferred_method: Optional[str] = Field(None, min_length=1, max_length=32)
+    crawl_delay_seconds: Optional[int] = Field(None, ge=0, le=3600)
+    max_requests_per_hour: Optional[int] = Field(None, ge=1, le=10000)
+    consecutive_failures: Optional[int] = Field(None, ge=0)
+    health_score: Optional[int] = Field(None, ge=0, le=100)
+    quarantine_until: Optional[datetime.datetime] = None
+    last_failure_reason: Optional[str] = Field(None, max_length=64)
     is_active: Optional[bool] = None
 
 
 class ReleaseSourceOut(ReleaseSourceBase):
     id: int
+    consecutive_failures: int = 0
+    health_score: int = 100
+    quarantine_until: Optional[datetime.datetime] = None
+    last_failure_reason: Optional[str] = None
+    last_success_at: Optional[datetime.datetime] = None
+    last_listing_checked_at: Optional[datetime.datetime] = None
     created_at: Optional[datetime.datetime] = None
     updated_at: Optional[datetime.datetime] = None
 

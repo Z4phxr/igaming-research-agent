@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     release_max_links_per_source: int = 40
     release_max_fetches_per_source: int = 80
     release_fetch_user_agent: str = "Mozilla/5.0 (compatible; iGamingResearchAgent/1.0)"
+    release_request_jitter_seconds: float = 0.3
+    release_domain_default_crawl_delay_seconds: int = 2
+    release_domain_default_hourly_limit: int = 60
+    release_quarantine_hours: int = 24
+    release_quarantine_failure_threshold: int = 3
+    release_enable_feed_first: bool = True
 
     model_config = SettingsConfigDict(
         env_file=".env",
