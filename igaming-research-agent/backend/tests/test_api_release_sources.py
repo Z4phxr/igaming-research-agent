@@ -96,7 +96,7 @@ def test_release_source_health_check_returns_passed_source(client, monkeypatch):
     assert payload["results"][0]["latest_article_url"] == "https://news.kalshi.com/p/latest"
 
 
-def test_release_source_health_check_returns_error_when_no_dedicated_parser(client, monkeypatch):
+def test_release_source_health_check_uses_generic_fallback_when_no_dedicated_parser(client, monkeypatch):
     created = client.post(
         "/api/release-sources",
         json={
@@ -113,15 +113,32 @@ def test_release_source_health_check_returns_error_when_no_dedicated_parser(clie
 
     monkeypatch.setattr(release_sources_api, "resolve_listing_parser", lambda *_args, **_kwargs: None)
 
+    listing_html = '<a href="https://unknown.example/news/2026/03/release-1.html">Release</a>'
+    article_html = (
+        '<html><head>'
+        '<title>Unknown Release</title>'
+        '<meta property="article:published_time" content="2026-03-20T10:00:00Z" />'
+        '</head><body>Release body</body></html>'
+    )
+
+    def fake_http_get(url: str, timeout: int = 20):
+        if url == "https://unknown.example/news":
+            return listing_html
+        if url == "https://unknown.example/news/2026/03/release-1.html":
+            return article_html
+        return "<html></html>"
+
+    monkeypatch.setattr(release_sources_api, "_http_get", fake_http_get)
+
     response = client.post("/api/release-sources/health-check")
     assert response.status_code == 200
 
     payload = response.json()
     assert payload["total_sources"] == 1
-    assert payload["passed_sources"] == 0
-    assert payload["failed_sources"] == 1
-    assert payload["results"][0]["passed"] is False
-    assert "No dedicated parser" in payload["results"][0]["error_log"]
+    assert payload["passed_sources"] == 1
+    assert payload["failed_sources"] == 0
+    assert payload["results"][0]["passed"] is True
+    assert payload["results"][0]["latest_article_url"] == "https://unknown.example/news/2026/03/release-1.html"
 
 
 def test_single_release_source_health_check_returns_result_for_selected_company(client, monkeypatch):
