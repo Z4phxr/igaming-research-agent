@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 import re
 from dataclasses import dataclass
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 from bs4 import BeautifulSoup
 
@@ -92,6 +92,8 @@ class ConfigDrivenHtmlParser(PortalListingParser):
             absolute_url = urljoin(source_url, href)
             if not href or not absolute_url or absolute_url in seen:
                 continue
+            if _same_effective_url(absolute_url, source_url):
+                continue
 
             title = ""
             if config.title_selector:
@@ -148,6 +150,16 @@ class ConfigDrivenHtmlParser(PortalListingParser):
 
 def _clean_text(value: str) -> str:
     return re.sub(r"\s+", " ", (value or "").strip())
+
+
+def _same_effective_url(left: str, right: str) -> bool:
+    a = urlsplit((left or "").strip())
+    b = urlsplit((right or "").strip())
+    a_host = (a.netloc or "").lower().lstrip("www.")
+    b_host = (b.netloc or "").lower().lstrip("www.")
+    a_path = (a.path or "").rstrip("/")
+    b_path = (b.path or "").rstrip("/")
+    return a_host == b_host and a_path == b_path
 
 
 def _parse_date(raw: str, formats: tuple[str, ...]) -> datetime.datetime | None:

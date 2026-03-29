@@ -154,11 +154,14 @@ def test_wv_config_sets_blocked_reason_for_forbidden_page():
 
 
 def test_rgc_config_matches_company_name_and_extracts_news_links():
-    parser = resolve_listing_parser("https://www.responsiblegambling.org/news", "Responsible Gambling Council")
+    parser = resolve_listing_parser("https://responsiblegambling.org/about-rgc/rgc-news/", "Responsible Gambling Council")
     assert parser is not None
 
     html = """
     <section>
+      <a href="https://responsiblegambling.org/about-rgc/rgc-news/">
+        RGC News Home
+      </a>
       <a href="https://responsiblegambling.org/about-rgc/rgc-news/rgc-and-icrg-partner-to-drive-global-gambling-harm-prevention/">
         Learn more
       </a>
@@ -167,7 +170,7 @@ def test_rgc_config_matches_company_name_and_extracts_news_links():
 
     result = parser.parse_listing(
         listing_html=html,
-        source_url="https://www.responsiblegambling.org/news",
+        source_url="https://responsiblegambling.org/about-rgc/rgc-news/",
         company_name="Responsible Gambling Council",
     )
 
