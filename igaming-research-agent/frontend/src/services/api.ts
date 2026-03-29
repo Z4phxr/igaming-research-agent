@@ -30,6 +30,10 @@ export const api = axios.create({
 
 function getApiErrorMessage(error: unknown, fallback: string): string {
   if (axios.isAxiosError(error)) {
+    if (!error.response) {
+      return 'Cannot reach backend API. Check if Docker/Desktop backend is running and API proxy is available.';
+    }
+
     const responseData = error.response?.data as
       | { detail?: string | { message?: string }; message?: string }
       | string
