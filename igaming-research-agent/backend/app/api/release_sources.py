@@ -1,8 +1,10 @@
 """CRUD endpoints for release source management."""
 
 import datetime
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -11,14 +13,15 @@ from app.models import ReleaseSource as ReleaseSourceModel
 from app.schemas import ReleaseSourceCreate, ReleaseSourceOut, ReleaseSourceUpdate
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
-@router.get("", response_model=list[ReleaseSourceOut])
+@router.get("")
 def list_release_sources(db: Session = Depends(get_db)):
     try:
         rows = db.query(ReleaseSourceModel).order_by(ReleaseSourceModel.id.asc()).all()
         now = datetime.datetime.utcnow()
-        return [
+        payload = [
             {
                 "id": row.id,
                 "company_name": row.company_name or "",
@@ -26,13 +29,15 @@ def list_release_sources(db: Session = Depends(get_db)):
                 "source_url": row.source_url or "",
                 "notes": row.notes or "",
                 "is_active": bool(row.is_active),
-                "created_at": row.created_at or now,
-                "updated_at": row.updated_at or now,
+                "created_at": (row.created_at or now).isoformat(),
+                "updated_at": (row.updated_at or now).isoformat(),
             }
             for row in rows
         ]
+        return JSONResponse(content=payload)
     except Exception:
-        return []
+        logger.exception("Failed to list release sources")
+        return JSONResponse(content=[])
 
 
 @router.post("", response_model=ReleaseSourceOut, status_code=status.HTTP_201_CREATED)
