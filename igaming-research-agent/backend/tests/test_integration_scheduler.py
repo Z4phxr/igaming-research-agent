@@ -31,8 +31,9 @@ def test_scheduler_start_and_stop_registers_job(monkeypatch):
     scheduler.start_scheduler()
 
     assert fake.running is True
-    assert len(fake.jobs) == 1
-    assert fake.jobs[0]["id"] == "daily_pipeline"
+    assert len(fake.jobs) == 2
+    job_ids = {job["id"] for job in fake.jobs}
+    assert job_ids == {"daily_articles_pipeline", "daily_releases_pipeline"}
 
     scheduler.stop_scheduler()
     assert fake.shutdown_called is True
