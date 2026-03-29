@@ -371,7 +371,7 @@ def apply_release_source_data_migration() -> None:
                     "category": source["category"],
                     "source_url": source["source_url"],
                     "notes": source["notes"],
-                    "is_active": 1,
+                    "is_active": True,
                 },
             )
 
