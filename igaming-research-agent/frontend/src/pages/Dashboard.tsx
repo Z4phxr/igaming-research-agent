@@ -4,8 +4,11 @@ import ArticleCard from '@/components/ArticleCard';
 import { getLatestReport } from '@/services/api';
 import type { Report } from '@/types';
 
+type DashboardView = 'top_stories' | 'new_releases';
+
 export default function Dashboard() {
   const [latestReport, setLatestReport] = useState<Report | null>(null);
+  const [view, setView] = useState<DashboardView>('top_stories');
   const [showAllArticles, setShowAllArticles] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -28,6 +31,9 @@ export default function Dashboard() {
   }, [showAllArticles]);
 
   const articles = [...(latestReport?.articles ?? [])].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  const releaseArticles = [...(latestReport?.release_articles ?? [])].sort(
+    (a, b) => new Date(b.published_date || b.scraped_date).getTime() - new Date(a.published_date || a.scraped_date).getTime(),
+  );
   const keptCount = articles.filter((article) => article.kept).length;
   const totalScreened = latestReport?.total_articles_found ?? 0;
   const today = new Date();
@@ -77,59 +83,109 @@ export default function Dashboard() {
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-[#888888]">Showing {keptCount} kept / {totalScreened} total screened</p>
-            <button
-              type="button"
-              className={`rounded-full border px-4 py-1.5 text-xs font-medium transition-colors ${
-                showAllArticles
-                  ? 'border-[#2563eb] bg-[#2563eb] text-white'
-                  : 'border-[#333333] text-[#888888] hover:text-white'
-              }`}
-              onClick={() => setShowAllArticles((prev) => !prev)}
-            >
-              {showAllArticles ? 'Show kept only' : 'Show all articles'}
-            </button>
-          </div>
-
-          <div className="space-y-2">
-            <p className="text-[11px] uppercase tracking-[0.1em] text-[#555555]">Intelligence Briefing</p>
-            <div className="rounded-lg border border-[#222222] bg-[#111111] p-4">
-              {latestReport.briefing ? (
-                <ReactMarkdown
-                  components={{
-                    h2: ({ children }) => (
-                      <h2 className="mb-3 border-b border-[#222222] pb-2 text-base font-semibold text-white">{children}</h2>
-                    ),
-                    p: ({ children }) => <p className="mb-3 leading-7 text-[#888888] last:mb-0">{children}</p>,
-                    strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
-                    ul: ({ children }) => <ul className="mb-2 list-disc space-y-1 pl-5 text-[#888888]">{children}</ul>,
-                    li: ({ children }) => <li className="marker:text-[#2563eb]">{children}</li>,
-                  }}
-                >
-                  {latestReport.briefing}
-                </ReactMarkdown>
-              ) : (
-                <p className="text-sm text-[#555555]">Briefing not available for this report</p>
-              )}
+            <div className="inline-flex items-center rounded-full border border-[#333333] bg-[#0f0f0f] p-1">
+              <button
+                type="button"
+                className={`rounded-full px-4 py-1.5 text-xs font-medium transition-colors ${
+                  view === 'top_stories'
+                    ? 'bg-[#2563eb] text-white'
+                    : 'text-[#888888] hover:text-white'
+                }`}
+                onClick={() => setView('top_stories')}
+              >
+                Top Stories
+              </button>
+              <button
+                type="button"
+                className={`rounded-full px-4 py-1.5 text-xs font-medium transition-colors ${
+                  view === 'new_releases'
+                    ? 'bg-[#2563eb] text-white'
+                    : 'text-[#888888] hover:text-white'
+                }`}
+                onClick={() => setView('new_releases')}
+              >
+                New Releases
+              </button>
             </div>
-            <p className="text-[11px] text-[#555555]">
-              {latestReport.briefing_generated_at
-                ? `Generated ${new Date(latestReport.briefing_generated_at).toLocaleString()}`
-                : 'Briefing timestamp unavailable'}
-            </p>
+
+            {view === 'top_stories' && (
+              <button
+                type="button"
+                className={`rounded-full border px-4 py-1.5 text-xs font-medium transition-colors ${
+                  showAllArticles
+                    ? 'border-[#2563eb] bg-[#2563eb] text-white'
+                    : 'border-[#333333] text-[#888888] hover:text-white'
+                }`}
+                onClick={() => setShowAllArticles((prev) => !prev)}
+              >
+                {showAllArticles ? 'Show kept only' : 'Show all articles'}
+              </button>
+            )}
           </div>
 
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.1em] text-[#555555]">Top Stories</p>
-          </div>
+          {view === 'top_stories' && (
+            <>
+              <p className="text-sm text-[#888888]">Showing {keptCount} kept / {totalScreened} total screened</p>
+              <div className="space-y-2">
+                <p className="text-[11px] uppercase tracking-[0.1em] text-[#555555]">Intelligence Briefing</p>
+                <div className="rounded-lg border border-[#222222] bg-[#111111] p-4">
+                  {latestReport.briefing ? (
+                    <ReactMarkdown
+                      components={{
+                        h2: ({ children }) => (
+                          <h2 className="mb-3 border-b border-[#222222] pb-2 text-base font-semibold text-white">{children}</h2>
+                        ),
+                        p: ({ children }) => <p className="mb-3 leading-7 text-[#888888] last:mb-0">{children}</p>,
+                        strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+                        ul: ({ children }) => <ul className="mb-2 list-disc space-y-1 pl-5 text-[#888888]">{children}</ul>,
+                        li: ({ children }) => <li className="marker:text-[#2563eb]">{children}</li>,
+                      }}
+                    >
+                      {latestReport.briefing}
+                    </ReactMarkdown>
+                  ) : (
+                    <p className="text-sm text-[#555555]">Briefing not available for this report</p>
+                  )}
+                </div>
+                <p className="text-[11px] text-[#555555]">
+                  {latestReport.briefing_generated_at
+                    ? `Generated ${new Date(latestReport.briefing_generated_at).toLocaleString()}`
+                    : 'Briefing timestamp unavailable'}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.1em] text-[#555555]">Top Stories</p>
+              </div>
+            </>
+          )}
+
+          {view === 'new_releases' && (
+            <div>
+              <p className="text-sm text-[#888888]">Latest company releases discovered in the last 24 hours</p>
+            </div>
+          )}
         </div>
       )}
 
       <div className="grid gap-3 md:grid-cols-2">
-        {articles.map((article) => (
-          <ArticleCard key={article.id} article={article} rejected={!article.kept} />
-        ))}
+        {view === 'top_stories' &&
+          articles.map((article) => (
+            <ArticleCard key={article.id} article={article} rejected={!article.kept} />
+          ))}
+
+        {view === 'new_releases' &&
+          releaseArticles.map((article) => (
+            <ArticleCard key={article.id} article={article} rejected={false} />
+          ))}
       </div>
+
+      {!loading && !error && view === 'new_releases' && releaseArticles.length === 0 && (
+        <div className="empty-state">
+          <div className="empty-state-icon" />
+          <p>No fresh releases found in the last 24h. Add more source pages in Settings.</p>
+        </div>
+      )}
     </section>
   );
 }

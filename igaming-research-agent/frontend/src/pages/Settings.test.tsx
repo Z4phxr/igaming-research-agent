@@ -20,6 +20,10 @@ describe('Settings', () => {
     ] as any[];
 
     vi.spyOn(apiService, 'getQueries').mockImplementation(async () => [...queries]);
+    vi.spyOn(apiService, 'getReleaseSources').mockResolvedValue([] as any);
+    vi.spyOn(apiService, 'createReleaseSource').mockResolvedValue({} as any);
+    vi.spyOn(apiService, 'updateReleaseSource').mockResolvedValue({} as any);
+    vi.spyOn(apiService, 'deleteReleaseSource').mockResolvedValue();
     vi.spyOn(apiService, 'createQuery').mockImplementation(async (payload: any) => {
       const item = {
         id: 2,

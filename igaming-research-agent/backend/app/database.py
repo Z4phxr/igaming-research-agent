@@ -63,6 +63,8 @@ def ensure_article_runtime_columns() -> None:
         statements.append(f"ALTER TABLE articles ADD COLUMN kept BOOLEAN NOT NULL DEFAULT {bool_default}")
     if "rejection_reason" not in existing_columns:
         statements.append("ALTER TABLE articles ADD COLUMN rejection_reason VARCHAR(64)")
+    if "article_type" not in existing_columns:
+        statements.append("ALTER TABLE articles ADD COLUMN article_type VARCHAR(32) NOT NULL DEFAULT 'top_story'")
 
     if not statements:
         return

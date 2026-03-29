@@ -17,6 +17,7 @@ export interface Article {
   summary: string;
   score: number;
   raw_score?: number;
+  article_type?: 'top_story' | 'release';
   tags: string;
   source_domain: string;
   published_date: string;
@@ -35,6 +36,28 @@ export interface Report {
   briefing?: string | null;
   briefing_generated_at?: string | null;
   articles: Article[];
+  release_articles?: Article[];
+}
+
+export interface ReleaseSource {
+  id: number;
+  company_name: string;
+  source_url: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateReleaseSourceDto {
+  company_name: string;
+  source_url: string;
+  is_active: boolean;
+}
+
+export interface UpdateReleaseSourceDto {
+  company_name?: string;
+  source_url?: string;
+  is_active?: boolean;
 }
 
 export interface CreateQueryDto {

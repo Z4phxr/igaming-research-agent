@@ -43,6 +43,7 @@ class ArticleOut(BaseModel):
     summary: Optional[str] = None
     full_text: Optional[str] = None
     score: Optional[int] = None
+    article_type: str = "top_story"
     tags: Optional[str] = None
     matched_query_id: Optional[int] = None
     published_date: Optional[datetime.datetime] = None
@@ -79,5 +80,29 @@ class ArticleFeedbackOut(BaseModel):
     feedback_type: Literal["helpful", "score_too_low", "score_too_high"]
     user_corrected_score: Optional[int] = None
     created_at: datetime.datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ReleaseSourceBase(BaseModel):
+    company_name: str = Field(..., min_length=1, max_length=255)
+    source_url: str = Field(..., min_length=1, max_length=2048)
+    is_active: bool = True
+
+
+class ReleaseSourceCreate(ReleaseSourceBase):
+    """Create release source payload."""
+
+
+class ReleaseSourceUpdate(BaseModel):
+    company_name: Optional[str] = Field(None, min_length=1, max_length=255)
+    source_url: Optional[str] = Field(None, min_length=1, max_length=2048)
+    is_active: Optional[bool] = None
+
+
+class ReleaseSourceOut(ReleaseSourceBase):
+    id: int
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
 
     model_config = ConfigDict(from_attributes=True)

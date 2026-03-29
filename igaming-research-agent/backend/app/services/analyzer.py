@@ -29,9 +29,9 @@ Answer only YES or NO.
 
 Answer YES only if ALL of these are true:
 - About the United States specifically (not Europe, Asia, or global/international)
-- About legislation, regulation, M&A, earnings, licensing, or executive moves
+- About legislation, regulation, M&A, earnings, licensing, executive moves or product updates
 - Related to: sports betting, iGaming, online casino, fantasy sports, 
-  prediction markets (Polymarket, Kalshi, PredictIt), VGTs, tribal gaming
+  prediction markets (Polymarket, Kalshi, PredictIt, etc.), VGTs, tribal gaming
 - Contains at least one of: specific bill numbers (SB/HB/AB), Gaming Commission, 
   regulator names, company names (DraftKings, FanDuel, BetMGM, Penn, Caesars), 
   or federal agencies (CFTC, DOJ, SEC)

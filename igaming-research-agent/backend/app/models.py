@@ -77,6 +77,7 @@ class Article(Base):
     kept: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     rejection_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
     tags: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    article_type: Mapped[str] = mapped_column(String(32), default="top_story", nullable=False, index=True)
     matched_query_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("queries.id", ondelete="SET NULL"),
@@ -135,5 +136,24 @@ class ArticleFeedback(Base):
     article: Mapped[Article] = relationship("Article", back_populates="feedback_entries")
 
 
+class ReleaseSource(Base):
+    """Configured company/news source pages for release discovery."""
+
+    __tablename__ = "release_sources"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    company_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_url: Mapped[str] = mapped_column(String(2048), unique=True, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        default=datetime.datetime.utcnow,
+        onupdate=datetime.datetime.utcnow,
+        nullable=False,
+    )
+
+
 Index("ix_articles_score", Article.score)
 Index("ix_articles_scraped_date", Article.scraped_date)
+Index("ix_release_sources_company_name", ReleaseSource.company_name)

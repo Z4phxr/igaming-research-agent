@@ -1,5 +1,14 @@
 import axios from 'axios';
-import type { CreateQueryDto, FeedbackType, Query, Report, UpdateQueryDto } from '@/types';
+import type {
+  CreateQueryDto,
+  CreateReleaseSourceDto,
+  FeedbackType,
+  Query,
+  ReleaseSource,
+  Report,
+  UpdateQueryDto,
+  UpdateReleaseSourceDto,
+} from '@/types';
 
 function normalizeApiBaseUrl(rawBaseUrl: string): string {
   const trimmed = rawBaseUrl.replace(/\/+$/, '');
@@ -116,6 +125,41 @@ export async function deleteQuery(id: number): Promise<void> {
     await api.delete(`/queries/${id}`);
   } catch (error) {
     throw new Error(getApiErrorMessage(error, 'Failed to delete query.'));
+  }
+}
+
+export async function getReleaseSources(): Promise<ReleaseSource[]> {
+  try {
+    const { data } = await api.get<ReleaseSource[]>('/release-sources');
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to fetch release sources.'));
+  }
+}
+
+export async function createReleaseSource(data: CreateReleaseSourceDto): Promise<ReleaseSource> {
+  try {
+    const { data: created } = await api.post<ReleaseSource>('/release-sources', data);
+    return created;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to create release source.'));
+  }
+}
+
+export async function updateReleaseSource(id: number, data: UpdateReleaseSourceDto): Promise<ReleaseSource> {
+  try {
+    const { data: updated } = await api.put<ReleaseSource>(`/release-sources/${id}`, data);
+    return updated;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to update release source.'));
+  }
+}
+
+export async function deleteReleaseSource(id: number): Promise<void> {
+  try {
+    await api.delete(`/release-sources/${id}`);
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to delete release source.'));
   }
 }
 

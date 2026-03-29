@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app.models import Article, Report
 from app.services.analyzer import run_analysis_pipeline
+from app.services.release_discovery import discover_recent_releases
 from app.services.report_generator import generate_briefing
 from app.services.scraper import scrape_articles
 from app.services.search import run_search_pipeline
@@ -154,6 +155,11 @@ def run_daily_pipeline(db: Session | None = None, raise_on_error: bool = False) 
         if not final_articles:
             logger.warning("Daily pipeline analysis returned no final articles")
 
+        release_articles = discover_recent_releases(session, now_utc=pipeline_now)
+        logger.info("Daily pipeline step release discovery complete: count=%s", len(release_articles))
+
+        all_articles_for_persistence = all_articles + release_articles
+
         briefing_text = generate_briefing(final_articles)
         briefing_generated_at = None
         if briefing_text is None:
@@ -164,7 +170,7 @@ def run_daily_pipeline(db: Session | None = None, raise_on_error: bool = False) 
             logger.info("Briefing generated successfully")
 
         persisted_articles: list[Article] = []
-        for item in all_articles:
+        for item in all_articles_for_persistence:
             url = str(item.get("url", "")).strip()
             if not url:
                 continue
@@ -186,6 +192,7 @@ def run_daily_pipeline(db: Session | None = None, raise_on_error: bool = False) 
                 existing.kept = bool(item.get("kept", existing.kept))
                 existing.rejection_reason = item.get("rejection_reason")
                 existing.tags = str(item.get("tags") or existing.tags)
+                existing.article_type = str(item.get("article_type") or existing.article_type or "top_story")
                 if published_date is not None:
                     existing.published_date = published_date
                 existing.scraped_date = datetime.datetime.utcnow()
@@ -204,6 +211,7 @@ def run_daily_pipeline(db: Session | None = None, raise_on_error: bool = False) 
                 kept=bool(item.get("kept", int(item.get("score", 0)) >= 6)),
                 rejection_reason=item.get("rejection_reason"),
                 tags=str(item.get("tags") or ""),
+                article_type=str(item.get("article_type") or "top_story"),
                 matched_query_id=item.get("matched_query_id"),
                 published_date=published_date,
                 scraped_date=datetime.datetime.utcnow(),

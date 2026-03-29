@@ -1,12 +1,16 @@
 import {
   api,
   createQuery,
+  createReleaseSource,
+  deleteReleaseSource,
   deleteQuery,
   getLatestReport,
   getQueries,
+  getReleaseSources,
   getReportById,
   getReports,
   submitArticleFeedback,
+  updateReleaseSource,
   updateQuery,
 } from '@/services/api';
 
@@ -87,5 +91,35 @@ describe('api service', () => {
       user_corrected_score: 9,
     });
     postSpy.mockRestore();
+  });
+
+  it('calls release source endpoints', async () => {
+    const getSpy = vi.spyOn(api, 'get').mockResolvedValue({ data: [] });
+    const postSpy = vi.spyOn(api, 'post').mockResolvedValue({ data: { id: 1 } });
+    const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { id: 1 } });
+    const deleteSpy = vi.spyOn(api, 'delete').mockResolvedValue({});
+
+    await getReleaseSources();
+    await createReleaseSource({
+      company_name: 'IGT',
+      source_url: 'https://www.igt.com/explore-igt/news/news',
+      is_active: true,
+    });
+    await updateReleaseSource(1, { is_active: false });
+    await deleteReleaseSource(1);
+
+    expect(getSpy).toHaveBeenCalledWith('/release-sources');
+    expect(postSpy).toHaveBeenCalledWith('/release-sources', {
+      company_name: 'IGT',
+      source_url: 'https://www.igt.com/explore-igt/news/news',
+      is_active: true,
+    });
+    expect(putSpy).toHaveBeenCalledWith('/release-sources/1', { is_active: false });
+    expect(deleteSpy).toHaveBeenCalledWith('/release-sources/1');
+
+    getSpy.mockRestore();
+    postSpy.mockRestore();
+    putSpy.mockRestore();
+    deleteSpy.mockRestore();
   });
 });

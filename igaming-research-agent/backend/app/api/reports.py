@@ -19,9 +19,45 @@ feedback_router = APIRouter()
 
 
 def _serialize_report(report: ReportModel, show_all: bool) -> dict:
-    filtered_articles = [
-        article for article in report.articles if show_all or bool(getattr(article, "kept", True))
+    top_story_articles = [
+        article
+        for article in report.articles
+        if getattr(article, "article_type", "top_story") != "release"
     ]
+    filtered_articles = [
+        article for article in top_story_articles if show_all or bool(getattr(article, "kept", True))
+    ]
+    release_articles = [
+        article
+        for article in report.articles
+        if getattr(article, "article_type", "top_story") == "release"
+    ]
+    release_articles.sort(
+        key=lambda article: article.published_date or article.scraped_date,
+        reverse=True,
+    )
+
+    def _serialize_article(article: ArticleModel) -> dict:
+        return {
+            "id": article.id,
+            "title": article.title,
+            "url": article.url,
+            "source_domain": article.source_domain,
+            "summary": article.summary,
+            "full_text": article.full_text,
+            "score": article.score,
+            "raw_score": article.raw_score,
+            "passed_relevance_filter": article.passed_relevance_filter,
+            "kept": article.kept,
+            "rejection_reason": article.rejection_reason,
+            "tags": article.tags,
+            "article_type": getattr(article, "article_type", "top_story"),
+            "matched_query_id": article.matched_query_id,
+            "published_date": article.published_date,
+            "scraped_date": article.scraped_date,
+            "created_at": article.created_at,
+        }
+
     return {
         "id": report.id,
         "report_date": report.report_date,
@@ -30,27 +66,8 @@ def _serialize_report(report: ReportModel, show_all: bool) -> dict:
         "briefing": report.briefing,
         "briefing_generated_at": report.briefing_generated_at,
         "generated_at": report.generated_at,
-        "articles": [
-            {
-                "id": article.id,
-                "title": article.title,
-                "url": article.url,
-                "source_domain": article.source_domain,
-                "summary": article.summary,
-                "full_text": article.full_text,
-                "score": article.score,
-                "raw_score": article.raw_score,
-                "passed_relevance_filter": article.passed_relevance_filter,
-                "kept": article.kept,
-                "rejection_reason": article.rejection_reason,
-                "tags": article.tags,
-                "matched_query_id": article.matched_query_id,
-                "published_date": article.published_date,
-                "scraped_date": article.scraped_date,
-                "created_at": article.created_at,
-            }
-            for article in filtered_articles
-        ],
+        "articles": [_serialize_article(article) for article in filtered_articles],
+        "release_articles": [_serialize_article(article) for article in release_articles],
     }
 
 

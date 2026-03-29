@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import queries as queries_router
+from app.api import release_sources as release_sources_router
 from app.api import reports as reports_router
 from app.config import settings
 from app.database import init_db
@@ -37,6 +38,7 @@ app.add_middleware(
 )
 
 app.include_router(queries_router.router, prefix="/api/queries", tags=["queries"])
+app.include_router(release_sources_router.router, prefix="/api/release-sources", tags=["release-sources"])
 app.include_router(reports_router.router, prefix="/api/reports", tags=["reports"])
 app.include_router(reports_router.feedback_router, prefix="/api", tags=["reports"])
 
