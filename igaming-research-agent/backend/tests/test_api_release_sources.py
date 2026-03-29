@@ -1,3 +1,6 @@
+import datetime
+
+
 def test_release_source_crud_flow(client):
     created = client.post(
         "/api/release-sources",
@@ -49,3 +52,121 @@ def test_release_source_rejects_duplicates(client):
     assert first.status_code == 201
     assert second.status_code == 409
     assert second.json()["detail"] == "Release source already exists"
+
+
+def test_release_source_health_check_returns_passed_source(client, monkeypatch):
+    created = client.post(
+        "/api/release-sources",
+        json={
+            "company_name": "Kalshi",
+            "category": "Prediction Market",
+            "source_url": "https://news.kalshi.com/t/announcements",
+            "notes": "",
+            "is_active": True,
+        },
+    )
+    assert created.status_code == 201
+
+    class _Parser:
+        def parse_listing(self, **kwargs):
+            class _Parsed:
+                candidate_urls = ["https://news.kalshi.com/p/latest"]
+                candidate_titles = {"https://news.kalshi.com/p/latest": "Latest release"}
+                candidate_published_dates = {"https://news.kalshi.com/p/latest": datetime.datetime(2026, 3, 29, 12, 0, 0)}
+                empty_reason = None
+
+            return _Parsed()
+
+        def extract_article_published_date(self, _: str):
+            return datetime.datetime(2026, 3, 29, 12, 0, 0)
+
+    from app.api import release_sources as release_sources_api
+
+    monkeypatch.setattr(release_sources_api, "resolve_listing_parser", lambda *_args, **_kwargs: _Parser())
+    monkeypatch.setattr(release_sources_api, "_http_get", lambda *_args, **_kwargs: "<html></html>")
+
+    response = client.post("/api/release-sources/health-check")
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["total_sources"] == 1
+    assert payload["passed_sources"] == 1
+    assert payload["failed_sources"] == 0
+    assert payload["results"][0]["passed"] is True
+    assert payload["results"][0]["latest_article_url"] == "https://news.kalshi.com/p/latest"
+
+
+def test_release_source_health_check_returns_error_when_no_dedicated_parser(client, monkeypatch):
+    created = client.post(
+        "/api/release-sources",
+        json={
+            "company_name": "Unknown",
+            "category": "Other",
+            "source_url": "https://unknown.example/news",
+            "notes": "",
+            "is_active": True,
+        },
+    )
+    assert created.status_code == 201
+
+    from app.api import release_sources as release_sources_api
+
+    monkeypatch.setattr(release_sources_api, "resolve_listing_parser", lambda *_args, **_kwargs: None)
+
+    response = client.post("/api/release-sources/health-check")
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["total_sources"] == 1
+    assert payload["passed_sources"] == 0
+    assert payload["failed_sources"] == 1
+    assert payload["results"][0]["passed"] is False
+    assert "No dedicated parser" in payload["results"][0]["error_log"]
+
+
+def test_single_release_source_health_check_returns_result_for_selected_company(client, monkeypatch):
+    created = client.post(
+        "/api/release-sources",
+        json={
+            "company_name": "Evolution",
+            "category": "Supplier",
+            "source_url": "https://www.evolution.com/news",
+            "notes": "",
+            "is_active": True,
+        },
+    )
+    assert created.status_code == 201
+    source_id = created.json()["id"]
+
+    class _Parser:
+        def parse_listing(self, **kwargs):
+            class _Parsed:
+                candidate_urls = ["https://www.evolution.com/news/latest/"]
+                candidate_titles = {"https://www.evolution.com/news/latest/": "Latest Evolution"}
+                candidate_published_dates = {"https://www.evolution.com/news/latest/": datetime.datetime(2026, 3, 28, 9, 0, 0)}
+                empty_reason = None
+
+            return _Parsed()
+
+        def extract_article_published_date(self, _: str):
+            return datetime.datetime(2026, 3, 28, 9, 0, 0)
+
+    from app.api import release_sources as release_sources_api
+
+    monkeypatch.setattr(release_sources_api, "resolve_listing_parser", lambda *_args, **_kwargs: _Parser())
+    monkeypatch.setattr(release_sources_api, "_http_get", lambda *_args, **_kwargs: "<html></html>")
+
+    response = client.post(f"/api/release-sources/health-check/{source_id}")
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["status"] == "success"
+    assert payload["result"]["source_id"] == source_id
+    assert payload["result"]["passed"] is True
+    assert payload["result"]["latest_article_url"] == "https://www.evolution.com/news/latest/"
+
+
+def test_single_release_source_health_check_returns_404_when_source_missing(client):
+    response = client.post("/api/release-sources/health-check/9999")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Release source not found"

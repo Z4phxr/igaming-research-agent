@@ -74,3 +74,30 @@ def test_evolution_parser_stops_after_first_stale_following_new_items():
         "https://www.evolution.com/news/new-1/",
         "https://www.evolution.com/news/new-2/",
     ]
+
+
+def test_evolution_parser_handles_variant_title_node_and_whitespace():
+        parser = EvolutionHtmlParser()
+        html = """
+        <a class='teaser news-card' href='/news/resilient-dom/'>
+            <div><span class='news-card-date'>  18 / 03 / 26 </span></div>
+            <div class='news-card-content'>
+                <h4>
+                    Resilient   DOM   Card
+                </h4>
+            </div>
+        </a>
+        """
+
+        result = parser.parse_listing(
+                html,
+                "https://www.evolution.com/news",
+                "Evolution",
+                cutoff=datetime.datetime(2026, 3, 1),
+                now_utc=datetime.datetime(2026, 3, 29),
+        )
+
+        assert result.empty_reason is None
+        assert result.candidate_urls == ["https://www.evolution.com/news/resilient-dom/"]
+        assert result.candidate_titles[result.candidate_urls[0]] == "Resilient DOM Card"
+        assert result.candidate_published_dates[result.candidate_urls[0]] == datetime.datetime(2026, 3, 18)

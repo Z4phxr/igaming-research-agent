@@ -4,18 +4,14 @@ import datetime
 import re
 from urllib.parse import urljoin
 
+from bs4 import BeautifulSoup
+
 from app.services.portal_scrapers.base import ListingParseResult, PortalListingParser
 
 
 class BetMgmHtmlParser(PortalListingParser):
     """Dedicated parser for BetMGM news tiles on sports.betmgm.com blog pages."""
 
-    _TILE_PATTERN = re.compile(
-        r'<div[^>]*class="[^"]*news-tile[^"]*long-news-tile[^"]*"[^>]*>'
-        r'.*?<h3>\s*<a[^>]+href="(?P<href>[^"]+)"[^>]*>(?P<title>.*?)</a>'
-        r'.*?<span[^>]*class="[^"]*tile-date[^"]*"[^>]*>(?P<date>[^<]+)</span>',
-        flags=re.IGNORECASE | re.DOTALL,
-    )
     _LATEST_STORIES_HEADING = re.compile(
         r'<h2[^>]*>\s*Latest\s+Stories\s*</h2>',
         flags=re.IGNORECASE | re.DOTALL,
@@ -43,18 +39,26 @@ class BetMgmHtmlParser(PortalListingParser):
             result.empty_reason = "no_latest_stories_section"
             return result
 
-        html = scoped_html
-        tiles = list(self._TILE_PATTERN.finditer(html))
+        soup = BeautifulSoup(scoped_html, "html.parser")
+        tiles = soup.select("div.news-tile.long-news-tile")
 
         if not tiles:
             result.empty_reason = "no_news_tiles_found"
             return result
 
         seen: set[str] = set()
-        for index, match in enumerate(tiles):
-            href = (match.group("href") or "").strip()
-            title = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", match.group("title") or "")).strip()
-            raw_date = re.sub(r"\s+", " ", (match.group("date") or "")).strip()
+        for index, tile in enumerate(tiles):
+            link = tile.select_one("h3 a[href]") or tile.select_one("a[href]")
+            date_node = tile.select_one(".tile-date")
+
+            href = (link.get("href") if link else "") or ""
+            title = ""
+            if link is not None:
+                title = re.sub(r"\s+", " ", link.get_text(" ", strip=True)).strip()
+            raw_date = ""
+            if date_node is not None:
+                raw_date = re.sub(r"\s+", " ", date_node.get_text(" ", strip=True)).strip()
+
             published = self._parse_tile_date(raw_date)
             absolute_url = urljoin(source_url, href)
 

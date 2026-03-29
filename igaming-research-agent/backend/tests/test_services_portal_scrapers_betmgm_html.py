@@ -110,3 +110,28 @@ def test_betmgm_parser_returns_reason_when_latest_stories_missing():
 
     assert result.candidate_urls == []
     assert result.empty_reason == "no_latest_stories_section"
+
+
+def test_betmgm_parser_handles_markup_variants_in_latest_stories_scope():
+        parser = BetMgmHtmlParser()
+        html = """
+        <div class='section-intro'><h2>Latest Stories</h2></div>
+        <div id="sf-posts">
+            <div class="long-news-tile promo news-tile">
+                <h3><a class='tile-link' href='/en/blog/press/new-format/'>New Format</a></h3>
+                <span class='meta tile-date'>Mar 28, 2026</span>
+            </div>
+        </div>
+        """
+
+        result = parser.parse_listing(
+                html,
+                "https://sports.betmgm.com/en/blog/press/",
+                "BetMGM",
+                cutoff=datetime.datetime(2026, 3, 1),
+                now_utc=datetime.datetime(2026, 3, 29),
+        )
+
+        assert result.empty_reason is None
+        assert result.candidate_urls == ["https://sports.betmgm.com/en/blog/press/new-format/"]
+        assert result.candidate_titles[result.candidate_urls[0]] == "New Format"

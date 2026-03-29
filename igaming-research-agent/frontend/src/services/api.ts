@@ -5,6 +5,8 @@ import type {
   FeedbackType,
   Query,
   ReleaseSource,
+  ReleaseSourceHealthCheckResponse,
+  SingleReleaseSourceHealthCheckResponse,
   Report,
   UpdateQueryDto,
   UpdateReleaseSourceDto,
@@ -160,6 +162,29 @@ export async function deleteReleaseSource(id: number): Promise<void> {
     await api.delete(`/release-sources/${id}`);
   } catch (error) {
     throw new Error(getApiErrorMessage(error, 'Failed to delete release source.'));
+  }
+}
+
+export async function runReleaseSourceHealthCheck(): Promise<ReleaseSourceHealthCheckResponse> {
+  try {
+    const { data } = await api.post<ReleaseSourceHealthCheckResponse>('/release-sources/health-check', {});
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to run release source health check.'));
+  }
+}
+
+export async function runSingleReleaseSourceHealthCheck(
+  sourceId: number,
+): Promise<SingleReleaseSourceHealthCheckResponse> {
+  try {
+    const { data } = await api.post<SingleReleaseSourceHealthCheckResponse>(
+      `/release-sources/health-check/${sourceId}`,
+      {},
+    );
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to run release source health check for selected company.'));
   }
 }
 

@@ -2,7 +2,7 @@ name: Frontend CI
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "scraper"]
     paths:
       - "igaming-research-agent/frontend/**"
       - ".github/workflows/frontend-ci.yml"

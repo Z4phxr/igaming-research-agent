@@ -4,18 +4,13 @@ import datetime
 import re
 from urllib.parse import urljoin
 
+from bs4 import BeautifulSoup
+
 from app.services.portal_scrapers.base import ListingParseResult, PortalListingParser
 
 
 class EvolutionHtmlParser(PortalListingParser):
     """Dedicated parser for Evolution news cards on evolution.com/news."""
-
-    _CARD_PATTERN = re.compile(
-        r'<a[^>]+href="(?P<href>[^"]+)"[^>]*class="[^"]*news-card[^"]*"[^>]*>'
-        r'.*?<span[^>]*class="[^"]*news-card-date[^"]*"[^>]*>(?P<date>[^<]+)</span>'
-        r'.*?<p[^>]*class="[^"]*h4[^"]*"[^>]*>(?P<title>.*?)</p>',
-        flags=re.IGNORECASE | re.DOTALL,
-    )
 
     def matches(self, source_url: str, company_name: str) -> bool:
         token_url = (source_url or "").lower()
@@ -31,18 +26,27 @@ class EvolutionHtmlParser(PortalListingParser):
         now_utc: datetime.datetime | None = None,
     ) -> ListingParseResult:
         result = ListingParseResult()
-        html = listing_html or ""
-        cards = list(self._CARD_PATTERN.finditer(html))
+        soup = BeautifulSoup(listing_html or "", "html.parser")
+        cards = soup.select("a.news-card[href]")
 
         if not cards:
             result.empty_reason = "no_news_cards_found"
             return result
 
         seen: set[str] = set()
-        for index, match in enumerate(cards):
-            href = (match.group("href") or "").strip()
-            title = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", match.group("title") or "")).strip()
-            raw_date = re.sub(r"\s+", "", match.group("date") or "")
+        for index, card in enumerate(cards):
+            href = ((card.get("href") or "")).strip()
+
+            date_node = card.select_one(".news-card-date")
+            raw_date = ""
+            if date_node is not None:
+                raw_date = re.sub(r"\s+", "", date_node.get_text(strip=True))
+
+            title_node = card.select_one("p.h4") or card.select_one("h1, h2, h3, h4, h5")
+            title = ""
+            if title_node is not None:
+                title = re.sub(r"\s+", " ", title_node.get_text(" ", strip=True)).strip()
+
             published = self._parse_card_date(raw_date)
             absolute_url = urljoin(source_url, href)
 

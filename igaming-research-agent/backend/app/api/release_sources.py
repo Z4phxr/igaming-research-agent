@@ -2,18 +2,109 @@
 
 import datetime
 import logging
+from typing import Any
+
+import requests
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.models import ReleaseSource as ReleaseSourceModel
 from app.schemas import ReleaseSourceCreate, ReleaseSourceOut, ReleaseSourceUpdate
+from app.services.portal_scrapers import resolve_listing_parser
+from app.services.release_discovery import _extract_published_date, _extract_title
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _http_get(url: str, timeout: int = 20) -> str:
+    response = requests.get(
+        url,
+        timeout=timeout,
+        headers={"User-Agent": settings.release_fetch_user_agent},
+    )
+    response.raise_for_status()
+    return response.text
+
+
+def _run_single_source_health_check(source: ReleaseSourceModel, now_utc: datetime.datetime) -> dict[str, Any]:
+    parser = resolve_listing_parser(source.source_url, source.company_name)
+    base_result: dict[str, Any] = {
+        "source_id": source.id,
+        "company_name": source.company_name,
+        "source_url": source.source_url,
+        "passed": False,
+        "latest_article_url": None,
+        "latest_article_title": None,
+        "latest_article_published_at": None,
+        "latest_article_age_hours": None,
+        "error_log": None,
+        "checked_at": now_utc.isoformat(),
+    }
+
+    if parser is None:
+        base_result["error_log"] = "No dedicated parser configured for this source"
+        return base_result
+
+    try:
+        listing_html = _http_get(source.source_url)
+    except requests.RequestException as exc:
+        base_result["error_log"] = f"Listing fetch failed: {exc}"
+        return base_result
+
+    parsed = parser.parse_listing(
+        listing_html=listing_html,
+        source_url=source.source_url,
+        company_name=source.company_name,
+        cutoff=None,
+        now_utc=now_utc,
+    )
+
+    if not parsed.candidate_urls:
+        reason = parsed.empty_reason or "no_candidate_urls"
+        base_result["error_log"] = f"No candidates found: {reason}"
+        return base_result
+
+    newest_url = parsed.candidate_urls[0]
+    newest_title = parsed.candidate_titles.get(newest_url)
+    newest_published = parsed.candidate_published_dates.get(newest_url)
+
+    # Probe a few top candidates and keep the newest published timestamp when available.
+    for candidate_url in parsed.candidate_urls[:5]:
+        candidate_title = parsed.candidate_titles.get(candidate_url)
+        candidate_published = parsed.candidate_published_dates.get(candidate_url)
+
+        if candidate_published is None:
+            try:
+                article_html = _http_get(candidate_url)
+            except requests.RequestException:
+                continue
+
+            candidate_published = parser.extract_article_published_date(article_html)
+            if candidate_published is None:
+                candidate_published = _extract_published_date(article_html)
+            if not candidate_title:
+                candidate_title = _extract_title(article_html, fallback=source.company_name)
+
+        if candidate_published is not None and (newest_published is None or candidate_published > newest_published):
+            newest_published = candidate_published
+            newest_url = candidate_url
+            newest_title = candidate_title
+
+    base_result["passed"] = True
+    base_result["latest_article_url"] = newest_url
+    base_result["latest_article_title"] = newest_title or source.company_name
+
+    if newest_published is not None:
+        base_result["latest_article_published_at"] = newest_published.isoformat()
+        age_seconds = (now_utc - newest_published).total_seconds()
+        base_result["latest_article_age_hours"] = max(0, round(age_seconds / 3600, 2))
+
+    return base_result
 
 
 @router.get("")
@@ -104,3 +195,41 @@ def delete_release_source(source_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Release source not found")
     db.delete(item)
     db.commit()
+
+
+@router.post("/health-check")
+def run_release_source_health_check(db: Session = Depends(get_db)):
+    now_utc = datetime.datetime.utcnow()
+    active_sources = (
+        db.query(ReleaseSourceModel)
+        .filter(ReleaseSourceModel.is_active == True)  # noqa: E712
+        .order_by(ReleaseSourceModel.company_name.asc(), ReleaseSourceModel.id.asc())
+        .all()
+    )
+
+    results = [_run_single_source_health_check(source, now_utc=now_utc) for source in active_sources]
+    passed_count = sum(1 for item in results if item["passed"])
+
+    return {
+        "status": "success",
+        "checked_at": now_utc.isoformat(),
+        "total_sources": len(results),
+        "passed_sources": passed_count,
+        "failed_sources": len(results) - passed_count,
+        "results": results,
+    }
+
+
+@router.post("/health-check/{source_id}")
+def run_single_release_source_health_check(source_id: int, db: Session = Depends(get_db)):
+    source = db.get(ReleaseSourceModel, source_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail="Release source not found")
+
+    now_utc = datetime.datetime.utcnow()
+    result = _run_single_source_health_check(source, now_utc=now_utc)
+    return {
+        "status": "success",
+        "checked_at": now_utc.isoformat(),
+        "result": result,
+    }
