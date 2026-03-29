@@ -106,7 +106,7 @@ class ReleaseSourceUpdate(BaseModel):
 
 class ReleaseSourceOut(ReleaseSourceBase):
     id: int
-    created_at: datetime.datetime
-    updated_at: datetime.datetime
+    created_at: Optional[datetime.datetime] = None
+    updated_at: Optional[datetime.datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
