@@ -19,7 +19,14 @@ class KalshiHtmlParser(PortalListingParser):
         token_name = (company_name or "").lower()
         return "news.kalshi.com" in token_url or "kalshi" in token_name
 
-    def parse_listing(self, listing_html: str, source_url: str, company_name: str) -> ListingParseResult:
+    def parse_listing(
+        self,
+        listing_html: str,
+        source_url: str,
+        company_name: str,
+        cutoff: datetime.datetime | None = None,
+        now_utc: datetime.datetime | None = None,
+    ) -> ListingParseResult:
         result = ListingParseResult()
 
         seen: set[str] = set()

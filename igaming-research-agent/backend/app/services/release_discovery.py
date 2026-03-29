@@ -653,10 +653,20 @@ def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = No
         source_links_limit = max(1, settings.release_max_links_per_source)
         listing_empty_reason = "no_candidate_links"
         listing_candidates: list[str] = []
+        listing_candidate_titles: dict[str, str] = {}
+        listing_candidate_dates: dict[str, datetime.datetime] = {}
         parser = resolve_listing_parser(source.source_url, source.company_name)
         if parser is not None:
-            parse_result = parser.parse_listing(listing_html, source.source_url, source.company_name)
+            parse_result = parser.parse_listing(
+                listing_html,
+                source.source_url,
+                source.company_name,
+                cutoff=cutoff,
+                now_utc=now,
+            )
             listing_candidates = parse_result.candidate_urls
+            listing_candidate_titles = parse_result.candidate_titles
+            listing_candidate_dates = parse_result.candidate_published_dates
             if parse_result.empty_reason:
                 listing_empty_reason = parse_result.empty_reason
         else:
@@ -680,63 +690,76 @@ def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = No
 
             if source_stats["candidates_total"] >= source_links_limit:
                 break
-            if source_stats["attempted_article_fetches"] >= source_fetch_budget:
-                break
 
             seen_urls.add(absolute_url)
             source_stats["candidates_total"] += 1
-            source_stats["attempted_article_fetches"] += 1
             run_pages_total += 1
-            domain = urlparse(absolute_url).netloc.lower()
-            allowed, guard_reason = _rate_limit_guard(domain, source, domain_state, now)
-            if not allowed:
-                source_stats["article_fetch_failed"] += 1
-                _increment_failure_reason(source_stats, guard_reason)
-                _log_page_result(
-                    page_name=source.company_name,
-                    page_url=absolute_url,
-                    stage="article",
-                    result="fail",
-                    scraped_relevant=0,
-                    reason=guard_reason,
-                    http_status=None,
-                    duration_ms=0,
-                    retries_used=0,
-                )
-                continue
 
-            article_html, article_meta = _fetch_html(
-                absolute_url,
-                source_name=source.company_name,
-                stage="article_fetch",
-                timeout=settings.release_fetch_timeout_seconds,
-            )
-            if not article_html:
-                source_stats["article_fetch_failed"] += 1
-                reason = str(article_meta["error_kind"])
-                _increment_failure_reason(source_stats, reason)
-                _log_page_result(
-                    page_name=source.company_name,
-                    page_url=absolute_url,
-                    stage="article",
-                    result="fail",
-                    scraped_relevant=0,
-                    reason=reason,
-                    http_status=article_meta.get("status_code"),
-                    duration_ms=int(article_meta.get("duration_ms", 0)),
-                    retries_used=int(article_meta.get("retries_used", 0)),
+            published_date = listing_candidate_dates.get(absolute_url)
+            article_title_hint = listing_candidate_titles.get(absolute_url)
+            article_html = ""
+            article_meta: dict[str, int | str | bool | None] = {
+                "status_code": None,
+                "duration_ms": 0,
+                "retries_used": 0,
+            }
+
+            if published_date is None:
+                if source_stats["attempted_article_fetches"] >= source_fetch_budget:
+                    break
+                source_stats["attempted_article_fetches"] += 1
+
+                domain = urlparse(absolute_url).netloc.lower()
+                allowed, guard_reason = _rate_limit_guard(domain, source, domain_state, now)
+                if not allowed:
+                    source_stats["article_fetch_failed"] += 1
+                    _increment_failure_reason(source_stats, guard_reason)
+                    _log_page_result(
+                        page_name=source.company_name,
+                        page_url=absolute_url,
+                        stage="article",
+                        result="fail",
+                        scraped_relevant=0,
+                        reason=guard_reason,
+                        http_status=None,
+                        duration_ms=0,
+                        retries_used=0,
+                    )
+                    continue
+
+                article_html, article_meta = _fetch_html(
+                    absolute_url,
+                    source_name=source.company_name,
+                    stage="article_fetch",
+                    timeout=settings.release_fetch_timeout_seconds,
                 )
-                if reason == "timeout":
-                    run_timeouts += 1
-                if reason in {"http_403", "http_429"}:
-                    run_blocked += 1
-                continue
-            source_stats["article_fetch_ok"] += 1
+                if not article_html:
+                    source_stats["article_fetch_failed"] += 1
+                    reason = str(article_meta["error_kind"])
+                    _increment_failure_reason(source_stats, reason)
+                    _log_page_result(
+                        page_name=source.company_name,
+                        page_url=absolute_url,
+                        stage="article",
+                        result="fail",
+                        scraped_relevant=0,
+                        reason=reason,
+                        http_status=article_meta.get("status_code"),
+                        duration_ms=int(article_meta.get("duration_ms", 0)),
+                        retries_used=int(article_meta.get("retries_used", 0)),
+                    )
+                    if reason == "timeout":
+                        run_timeouts += 1
+                    if reason in {"http_403", "http_429"}:
+                        run_blocked += 1
+                    continue
+                source_stats["article_fetch_ok"] += 1
+
+                published_date = _extract_published_date(article_html)
+                if parser is not None:
+                    published_date = parser.extract_article_published_date(article_html) or published_date
+
             run_pages_success += 1
-
-            published_date = _extract_published_date(article_html)
-            if parser is not None:
-                published_date = parser.extract_article_published_date(article_html) or published_date
             if published_date is None:
                 source_stats["rejected_missing_date"] += 1
                 _log_page_result(
@@ -774,7 +797,10 @@ def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = No
                     break
                 continue
 
-            title = _extract_title(article_html, fallback=f"{source.company_name} release")
+            if article_html:
+                title = _extract_title(article_html, fallback=f"{source.company_name} release")
+            else:
+                title = article_title_hint or f"{source.company_name} release"
             discovered.append(
                 {
                     "title": title,

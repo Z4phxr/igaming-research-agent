@@ -327,3 +327,122 @@ def test_discover_recent_releases_kalshi_stops_after_first_stale_article(monkeyp
         assert not any(url.endswith("/should-not-be-fetched") for url in urls_fetched)
     finally:
         db.close()
+
+
+def test_discover_recent_releases_evolution_uses_listing_dates_without_article_fetch(monkeypatch):
+    db = _build_session()
+    try:
+        db.add(
+            ReleaseSource(
+                company_name="Evolution Gaming",
+                category="Supplier",
+                source_url="https://www.evolution.com/news",
+                notes="",
+                is_active=True,
+                crawl_delay_seconds=0,
+                max_requests_per_hour=100,
+            )
+        )
+        db.commit()
+
+        now = datetime.datetime(2026, 3, 29, 20, 0, 0)
+
+        listing_html = '''
+        <a href="https://www.evolution.com/news/evolution-launches-crazy-time-brasil/" class="news-card mb-5 col-12">
+            <span class="news-card-date">18/03/26</span>
+            <div class="news-card-content mt-4">
+                <p class="h4">Evolution launches Crazy Time Brasil</p>
+            </div>
+        </a>
+        <a href="https://www.evolution.com/news/older-release/" class="news-card mb-5 col-12">
+            <span class="news-card-date">10/03/26</span>
+            <div class="news-card-content mt-4">
+                <p class="h4">Older release</p>
+            </div>
+        </a>
+        '''
+
+        call_count = {"listing": 0, "article": 0}
+
+        def fake_get(url, *args, **kwargs):
+            if url == "https://www.evolution.com/news":
+                call_count["listing"] += 1
+                return _FakeResponse(200, listing_html)
+            call_count["article"] += 1
+            return _FakeResponse(404, "not found")
+
+        monkeypatch.setattr(release_discovery.requests, "get", fake_get)
+        monkeypatch.setattr(release_discovery.settings, "release_recent_window_hours", 14 * 24)
+        monkeypatch.setattr(release_discovery.settings, "release_max_links_per_source", 10)
+        monkeypatch.setattr(release_discovery.settings, "release_max_fetches_per_source", 10)
+        monkeypatch.setattr(release_discovery.settings, "release_request_jitter_seconds", 0)
+
+        result = release_discovery.discover_recent_releases(db, now_utc=now)
+
+        assert len(result) == 1
+        assert result[0]["url"] == "https://www.evolution.com/news/evolution-launches-crazy-time-brasil/"
+        assert result[0]["title"] == "Evolution launches Crazy Time Brasil"
+        assert call_count["listing"] == 1
+        assert call_count["article"] == 0
+    finally:
+        db.close()
+
+
+def test_discover_recent_releases_betmgm_uses_listing_dates_without_article_fetch(monkeypatch):
+    db = _build_session()
+    try:
+        db.add(
+            ReleaseSource(
+                company_name="BetMGM",
+                category="Operator",
+                source_url="https://sports.betmgm.com/en/blog",
+                notes="",
+                is_active=True,
+                crawl_delay_seconds=0,
+                max_requests_per_hour=100,
+            )
+        )
+        db.commit()
+
+        now = datetime.datetime(2026, 3, 29, 20, 0, 0)
+
+        listing_html = '''
+                <div class="section-intro">
+                    <h2>Latest Stories</h2>
+                </div>
+                <div id="sf-posts">
+        <div class="news-tile long-news-tile -tag news-tile-392227">
+          <h3><a href="https://sports.betmgm.com/en/blog/new-partnership/">New partnership</a></h3>
+          <span class="tile-date">Mar 20, 2026</span>
+        </div>
+        <div class="news-tile long-news-tile -tag news-tile-392228">
+          <h3><a href="https://sports.betmgm.com/en/blog/old-news/">Old news</a></h3>
+          <span class="tile-date">Jan 20, 2026</span>
+        </div>
+                </div>
+        '''
+
+        call_count = {"listing": 0, "article": 0}
+
+        def fake_get(url, *args, **kwargs):
+            if url == "https://sports.betmgm.com/en/blog":
+                call_count["listing"] += 1
+                return _FakeResponse(200, listing_html)
+            call_count["article"] += 1
+            return _FakeResponse(404, "not found")
+
+        monkeypatch.setattr(release_discovery.requests, "get", fake_get)
+        monkeypatch.setattr(release_discovery.settings, "release_recent_window_hours", 30 * 24)
+        monkeypatch.setattr(release_discovery.settings, "release_max_links_per_source", 10)
+        monkeypatch.setattr(release_discovery.settings, "release_max_fetches_per_source", 10)
+        monkeypatch.setattr(release_discovery.settings, "release_request_jitter_seconds", 0)
+
+        result = release_discovery.discover_recent_releases(db, now_utc=now)
+
+        assert len(result) == 1
+        assert result[0]["url"] == "https://sports.betmgm.com/en/blog/new-partnership/"
+        assert result[0]["title"] == "New partnership"
+        assert call_count["listing"] == 1
+        assert call_count["article"] == 0
+    finally:
+        db.close()
