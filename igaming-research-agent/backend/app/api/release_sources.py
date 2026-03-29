@@ -2,6 +2,7 @@
 
 import datetime
 import logging
+import re
 from typing import Any
 from urllib.parse import urljoin
 
@@ -29,6 +30,15 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _normalize_source_url(value: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return raw
+    if raw.lower().startswith(("http://", "https://")):
+        return raw
+    return f"https://{raw}"
+
+
 def _http_get(url: str, timeout: int = 20) -> str:
     response = requests.get(
         url,
@@ -37,6 +47,25 @@ def _http_get(url: str, timeout: int = 20) -> str:
     )
     response.raise_for_status()
     return response.text
+
+
+def _extract_embedded_model_urls(listing_html: str, source_url: str) -> list[str]:
+    html = listing_html or ""
+    found: list[str] = []
+    seen: set[str] = set()
+
+    patterns = [
+        r'data-api-url=["\']([^"\']*\.model\.json)["\']',
+        r'data-news-feed-url=["\']([^"\']*\.model\.json)["\']',
+    ]
+    for pattern in patterns:
+        for rel in re.findall(pattern, html, flags=re.IGNORECASE):
+            absolute = urljoin(source_url, rel.strip())
+            if absolute and absolute not in seen:
+                seen.add(absolute)
+                found.append(absolute)
+
+    return found
 
 
 def _run_single_source_health_check(source: ReleaseSourceModel, now_utc: datetime.datetime) -> dict[str, Any]:
@@ -59,6 +88,14 @@ def _run_single_source_health_check(source: ReleaseSourceModel, now_utc: datetim
     except requests.RequestException as exc:
         base_result["error_log"] = f"Listing fetch failed: {exc}"
         return base_result
+
+    # Some AEM pages render list templates and expose the actual data in model.json endpoints.
+    for aux_url in _extract_embedded_model_urls(listing_html, source.source_url)[:2]:
+        try:
+            aux_payload = _http_get(aux_url)
+        except requests.RequestException:
+            continue
+        listing_html = f"{listing_html}\n{aux_payload}"
 
     if parser is not None:
         parsed = parser.parse_listing(
@@ -181,7 +218,7 @@ def list_release_sources(db: Session = Depends(get_db)):
 
 @router.post("", response_model=ReleaseSourceOut, status_code=status.HTTP_201_CREATED)
 def create_release_source(payload: ReleaseSourceCreate, db: Session = Depends(get_db)):
-    normalized_url = payload.source_url.strip()
+    normalized_url = _normalize_source_url(payload.source_url)
     existing = db.query(ReleaseSourceModel).filter(ReleaseSourceModel.source_url == normalized_url).first()
     if existing is not None:
         raise HTTPException(status_code=409, detail="Release source already exists")
@@ -195,6 +232,78 @@ def create_release_source(payload: ReleaseSourceCreate, db: Session = Depends(ge
     return item
 
 
+@router.post("/bulk")
+def create_release_sources_bulk(payload: list[ReleaseSourceCreate], db: Session = Depends(get_db)):
+    if not payload:
+        return {
+            "status": "success",
+            "created_count": 0,
+            "skipped_count": 0,
+            "created": [],
+            "skipped": [],
+        }
+
+    created: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    normalized_in_request: set[str] = set()
+
+    for item in payload:
+        normalized_url = _normalize_source_url(item.source_url)
+        if not normalized_url:
+            skipped.append(
+                {
+                    "company_name": item.company_name,
+                    "source_url": item.source_url,
+                    "reason": "empty_source_url",
+                }
+            )
+            continue
+
+        if normalized_url in normalized_in_request:
+            skipped.append(
+                {
+                    "company_name": item.company_name,
+                    "source_url": normalized_url,
+                    "reason": "duplicate_in_payload",
+                }
+            )
+            continue
+
+        existing = db.query(ReleaseSourceModel).filter(ReleaseSourceModel.source_url == normalized_url).first()
+        if existing is not None:
+            skipped.append(
+                {
+                    "company_name": item.company_name,
+                    "source_url": normalized_url,
+                    "reason": "already_exists",
+                }
+            )
+            continue
+
+        normalized_in_request.add(normalized_url)
+        row = ReleaseSourceModel(**item.model_dump())
+        row.source_url = normalized_url
+        db.add(row)
+        db.flush()
+        created.append(
+            {
+                "id": row.id,
+                "company_name": row.company_name,
+                "source_url": row.source_url,
+            }
+        )
+
+    db.commit()
+
+    return {
+        "status": "success",
+        "created_count": len(created),
+        "skipped_count": len(skipped),
+        "created": created,
+        "skipped": skipped,
+    }
+
+
 @router.put("/{source_id}", response_model=ReleaseSourceOut)
 def update_release_source(source_id: int, payload: ReleaseSourceUpdate, db: Session = Depends(get_db)):
     item = db.get(ReleaseSourceModel, source_id)
@@ -203,7 +312,7 @@ def update_release_source(source_id: int, payload: ReleaseSourceUpdate, db: Sess
 
     updates = payload.model_dump(exclude_unset=True)
     if "source_url" in updates:
-        updates["source_url"] = str(updates["source_url"]).strip()
+        updates["source_url"] = _normalize_source_url(str(updates["source_url"]))
         duplicate = (
             db.query(ReleaseSourceModel)
             .filter(ReleaseSourceModel.source_url == updates["source_url"], ReleaseSourceModel.id != source_id)

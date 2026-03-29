@@ -54,6 +54,46 @@ def test_release_source_rejects_duplicates(client):
     assert second.json()["detail"] == "Release source already exists"
 
 
+def test_release_source_bulk_create_normalizes_urls_and_skips_duplicates(client):
+    response = client.post(
+        "/api/release-sources/bulk",
+        json=[
+            {
+                "company_name": "DraftKings",
+                "category": "Operator",
+                "source_url": "www.draftkings.com/news-about",
+                "notes": "",
+                "is_active": True,
+            },
+            {
+                "company_name": "DraftKings Duplicate",
+                "category": "Operator",
+                "source_url": "https://www.draftkings.com/news-about",
+                "notes": "",
+                "is_active": True,
+            },
+            {
+                "company_name": "Hard Rock Bet",
+                "category": "Operator",
+                "source_url": "https://www.hardrock.com/blog",
+                "notes": "",
+                "is_active": True,
+            },
+        ],
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["created_count"] == 2
+    assert body["skipped_count"] == 1
+    assert any(item["source_url"] == "https://www.draftkings.com/news-about" for item in body["created"])
+    assert any(item["reason"] == "duplicate_in_payload" for item in body["skipped"])
+
+    listing = client.get("/api/release-sources")
+    assert listing.status_code == 200
+    assert len(listing.json()) == 2
+
+
 def test_release_source_health_check_returns_passed_source(client, monkeypatch):
     created = client.post(
         "/api/release-sources",

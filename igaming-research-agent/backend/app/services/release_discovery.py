@@ -258,6 +258,25 @@ def _extract_hrefs(html: str) -> list[str]:
     return [href.strip() for href in hrefs if href and href.strip()]
 
 
+def _extract_embedded_model_urls(listing_html: str, source_url: str) -> list[str]:
+    html = listing_html or ""
+    found: list[str] = []
+    seen: set[str] = set()
+
+    patterns = [
+        r'data-api-url=["\']([^"\']*\.model\.json)["\']',
+        r'data-news-feed-url=["\']([^"\']*\.model\.json)["\']',
+    ]
+    for pattern in patterns:
+        for rel in re.findall(pattern, html, flags=re.IGNORECASE):
+            absolute = urljoin(source_url, rel.strip())
+            if absolute and absolute not in seen:
+                seen.add(absolute)
+                found.append(absolute)
+
+    return found
+
+
 def _is_same_site(base_url: str, candidate_url: str) -> bool:
     base_host = (urlparse(base_url).netloc or "").lower().lstrip("www.")
     candidate_host = (urlparse(candidate_url).netloc or "").lower().lstrip("www.")
@@ -647,6 +666,18 @@ def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = No
             continue
         source_stats["listing_ok"] = 1
         run_pages_success += 1
+
+        # Dynamic AEM list/news-feed components often publish content via model.json endpoints.
+        for aux_url in _extract_embedded_model_urls(listing_html, source.source_url)[:2]:
+            aux_html, _ = _fetch_html(
+                aux_url,
+                source_name=source.company_name,
+                stage="listing_aux_fetch",
+                timeout=settings.release_listing_fetch_timeout_seconds,
+                max_retries=1,
+            )
+            if aux_html:
+                listing_html = f"{listing_html}\n{aux_html}"
 
         source_domain = urlparse(source.source_url).netloc
         source_fetch_budget = max(1, settings.release_max_fetches_per_source)

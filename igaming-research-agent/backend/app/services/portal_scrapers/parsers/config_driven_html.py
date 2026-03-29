@@ -21,6 +21,10 @@ class HtmlListingParserConfig:
     date_selector: str | None = None
     date_formats: tuple[str, ...] = ()
     scope_selector: str | None = None
+    link_href_must_contain: tuple[str, ...] = ()
+    link_href_excludes: tuple[str, ...] = ()
+    blocked_markers: tuple[str, ...] = ()
+    empty_reason_blocked: str = "bot_protection_blocked"
     descending_chronological: bool = False
     empty_reason_no_items: str = "no_config_items_found"
 
@@ -59,15 +63,32 @@ class ConfigDrivenHtmlParser(PortalListingParser):
 
         items = scope.select(config.item_selector)
         if not items:
+            page_text = (listing_html or "").lower()
+            if any(marker.lower() in page_text for marker in config.blocked_markers):
+                result.empty_reason = config.empty_reason_blocked
+                return result
             result.empty_reason = config.empty_reason_no_items
             return result
 
         seen: set[str] = set()
         for index, item in enumerate(items):
             link_node = item.select_one(config.link_selector)
+            if link_node is None and getattr(item, "name", "") == "a" and item.get("href"):
+                link_node = item
             href = ""
             if link_node is not None:
                 href = str(link_node.get("href") or "").strip()
+
+            href_lower = href.lower()
+            if config.link_href_must_contain and not any(
+                token.lower() in href_lower for token in config.link_href_must_contain
+            ):
+                continue
+            if config.link_href_excludes and any(
+                token.lower() in href_lower for token in config.link_href_excludes
+            ):
+                continue
+
             absolute_url = urljoin(source_url, href)
             if not href or not absolute_url or absolute_url in seen:
                 continue

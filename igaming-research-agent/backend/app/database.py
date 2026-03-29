@@ -29,7 +29,7 @@ DEFAULT_RELEASE_SOURCES: list[dict[str, str]] = [
     },
     {
         "company_name": "DraftKings",
-        "category": "Operator",
+        "source_url": "https://responsiblegambling.org/about-rgc/rgc-news/",
         "source_url": "https://www.draftkings.com/news-about",
         "notes": "Zaklady + kasyno + DFS, notowany na NASDAQ (DKNG)",
     },
@@ -276,7 +276,7 @@ DEFAULT_RELEASE_SOURCES: list[dict[str, str]] = [
     {
         "company_name": "Responsible Gambling Council",
         "category": "Org. branzowa",
-        "source_url": "https://www.responsiblegambling.org/news",
+        "source_url": "https://responsiblegambling.org/about-rgc/rgc-news/",
         "notes": "Responsible gaming standards US/CA",
     },
     {
