@@ -303,17 +303,25 @@ def ensure_release_source_runtime_columns() -> None:
 
     existing_columns = {column["name"] for column in inspector.get_columns("release_sources")}
     statements: list[str] = []
+    if "created_at" not in existing_columns:
+        statements.append("ALTER TABLE release_sources ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+    if "updated_at" not in existing_columns:
+        statements.append("ALTER TABLE release_sources ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     if "category" not in existing_columns:
         statements.append("ALTER TABLE release_sources ADD COLUMN category VARCHAR(64) NOT NULL DEFAULT ''")
     if "notes" not in existing_columns:
         statements.append("ALTER TABLE release_sources ADD COLUMN notes VARCHAR(1024)")
 
-    if not statements:
-        return
-
     with engine.begin() as connection:
         for statement in statements:
             connection.execute(text(statement))
+
+        # Repair legacy/null data to satisfy API response contracts.
+        connection.execute(text("UPDATE release_sources SET category = '' WHERE category IS NULL"))
+        connection.execute(text("UPDATE release_sources SET notes = '' WHERE notes IS NULL"))
+        connection.execute(text("UPDATE release_sources SET is_active = FALSE WHERE is_active IS NULL"))
+        connection.execute(text("UPDATE release_sources SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"))
+        connection.execute(text("UPDATE release_sources SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL"))
 
 
 def ensure_app_migrations_table() -> None:
@@ -344,11 +352,14 @@ def apply_release_source_data_migration() -> None:
         return
 
     with engine.begin() as connection:
+        existing_count = connection.execute(text("SELECT COUNT(*) FROM release_sources")).scalar() or 0
         already_applied = connection.execute(
             text("SELECT 1 FROM app_migrations WHERE name = :name LIMIT 1"),
             {"name": RELEASE_SOURCE_MIGRATION_NAME},
         ).scalar()
-        if already_applied:
+
+        # Self-heal: if migration marker exists but table is empty, repopulate defaults.
+        if already_applied and existing_count > 0:
             return
 
         insert_stmt = text(
@@ -375,7 +386,8 @@ def apply_release_source_data_migration() -> None:
                 },
             )
 
-        connection.execute(
-            text("INSERT INTO app_migrations (name) VALUES (:name)"),
-            {"name": RELEASE_SOURCE_MIGRATION_NAME},
-        )
+        if not already_applied:
+            connection.execute(
+                text("INSERT INTO app_migrations (name) VALUES (:name)"),
+                {"name": RELEASE_SOURCE_MIGRATION_NAME},
+            )

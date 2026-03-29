@@ -1,6 +1,7 @@
 """CRUD endpoints for release source management."""
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -12,7 +13,10 @@ router = APIRouter()
 
 @router.get("", response_model=list[ReleaseSourceOut])
 def list_release_sources(db: Session = Depends(get_db)):
-    return db.query(ReleaseSourceModel).order_by(ReleaseSourceModel.id.asc()).all()
+    try:
+        return db.query(ReleaseSourceModel).order_by(ReleaseSourceModel.id.asc()).all()
+    except SQLAlchemyError:
+        return []
 
 
 @router.post("", response_model=ReleaseSourceOut, status_code=status.HTTP_201_CREATED)
