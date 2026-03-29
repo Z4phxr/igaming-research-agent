@@ -372,6 +372,11 @@ export default function Settings() {
     });
   }, [healthResults, releaseSources, runningSingleHealthCheckId]);
 
+  const activeHealthSourcesCount = useMemo(
+    () => releaseSources.filter((source) => source.is_active).length,
+    [releaseSources],
+  );
+
   const renderQueriesView = () => (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -716,9 +721,9 @@ export default function Settings() {
 
       {healthError && <p className="text-sm text-[#dc2626]">{healthError}</p>}
 
-      {healthResults.length === 0 ? (
+      {activeHealthSourcesCount === 0 ? (
         <div className="rounded-lg border border-dashed border-[#333333] bg-[#0f0f0f] p-6 text-sm text-[#8b8b8b]">
-          No health check results yet. Click <span className="font-semibold text-white">Run Health Check</span>.
+          No active release sources available for health checks.
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">{healthCards}</div>
