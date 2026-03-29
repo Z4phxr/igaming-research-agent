@@ -159,4 +159,3 @@ class ReleaseSource(Base):
 Index("ix_articles_score", Article.score)
 Index("ix_articles_scraped_date", Article.scraped_date)
 Index("ix_release_sources_company_name", ReleaseSource.company_name)
-Index("ix_release_sources_category", ReleaseSource.category)
