@@ -183,3 +183,147 @@ def test_discover_recent_releases_applies_local_rate_limit(monkeypatch):
         assert sources[1].last_failure_reason == "local_rate_limit"
     finally:
         db.close()
+
+
+def test_discover_recent_releases_kalshi_dedicated_parser_accepts_in_window(monkeypatch):
+    db = _build_session()
+    try:
+        db.add(
+            ReleaseSource(
+                company_name="Kalshi",
+                category="Prediction Markets",
+                source_url="https://news.kalshi.com/t/announcements",
+                notes="",
+                is_active=True,
+                crawl_delay_seconds=0,
+                max_requests_per_hour=100,
+            )
+        )
+        db.commit()
+
+        now = datetime.datetime(2026, 3, 29, 20, 0, 0)
+
+        listing_html = (
+            '{"web_title":"ARK Invest x Kalshi","slug":"ark-invest-kalshi-partnership-prediction-markets-research-risk-management"}'
+        )
+        article_html = (
+            '<html><head><title>ARK Invest x Kalshi</title></head><body>'
+            '{"datePublished":"2026-03-29T19:34:11.667Z"}'
+            '</body></html>'
+        )
+
+        def fake_get(url, *args, **kwargs):
+            if url == "https://news.kalshi.com/t/announcements":
+                return _FakeResponse(200, listing_html)
+            if url.startswith("https://news.kalshi.com/p/"):
+                return _FakeResponse(200, article_html)
+            return _FakeResponse(404, "not found")
+
+        monkeypatch.setattr(release_discovery.requests, "get", fake_get)
+        monkeypatch.setattr(release_discovery.settings, "release_max_links_per_source", 5)
+        monkeypatch.setattr(release_discovery.settings, "release_max_fetches_per_source", 5)
+        monkeypatch.setattr(release_discovery.settings, "release_recent_window_hours", 24)
+        monkeypatch.setattr(release_discovery.settings, "release_request_jitter_seconds", 0)
+
+        result = release_discovery.discover_recent_releases(db, now_utc=now)
+
+        assert len(result) == 1
+        assert result[0]["url"] == (
+            "https://news.kalshi.com/p/ark-invest-kalshi-partnership-prediction-markets-research-risk-management"
+        )
+        assert result[0]["title"] == "ARK Invest x Kalshi"
+        assert result[0]["published_date"] is not None
+    finally:
+        db.close()
+
+
+def test_discover_recent_releases_kalshi_structured_empty_reason_logged(monkeypatch):
+    db = _build_session()
+    try:
+        db.add(
+            ReleaseSource(
+                company_name="Kalshi",
+                category="Prediction Markets",
+                source_url="https://news.kalshi.com/t/announcements",
+                notes="",
+                is_active=True,
+            )
+        )
+        db.commit()
+
+        def fake_get(url, *args, **kwargs):
+            if url == "https://news.kalshi.com/t/announcements":
+                return _FakeResponse(200, "<html><body>plain listing without structured slug</body></html>")
+            return _FakeResponse(404, "not found")
+
+        captured = []
+
+        def fake_log_page_result(**kwargs):
+            captured.append(kwargs)
+
+        monkeypatch.setattr(release_discovery.requests, "get", fake_get)
+        monkeypatch.setattr(release_discovery, "_log_page_result", fake_log_page_result)
+
+        result = release_discovery.discover_recent_releases(db, now_utc=datetime.datetime(2026, 3, 29, 20, 0, 0))
+
+        assert result == []
+        assert any(
+            item.get("stage") == "listing" and item.get("reason") == "no_structured_slug_found"
+            for item in captured
+        )
+    finally:
+        db.close()
+
+
+def test_discover_recent_releases_kalshi_stops_after_first_stale_article(monkeypatch):
+    db = _build_session()
+    try:
+        db.add(
+            ReleaseSource(
+                company_name="Kalshi",
+                category="Prediction Markets",
+                source_url="https://news.kalshi.com/t/announcements",
+                notes="",
+                is_active=True,
+                crawl_delay_seconds=0,
+                max_requests_per_hour=100,
+            )
+        )
+        db.commit()
+
+        now = datetime.datetime(2026, 3, 29, 20, 0, 0)
+
+        listing_html = (
+            '{"web_title":"Newest","slug":"newest"}'
+            '{"web_title":"Older","slug":"older"}'
+            '{"web_title":"ShouldNotBeFetched","slug":"should-not-be-fetched"}'
+        )
+
+        urls_fetched = []
+
+        def fake_get(url, *args, **kwargs):
+            if url == "https://news.kalshi.com/t/announcements":
+                return _FakeResponse(200, listing_html)
+            urls_fetched.append(url)
+            if url.endswith("/newest"):
+                return _FakeResponse(200, '{"datePublished":"2026-03-29T19:34:11.667Z"}')
+            if url.endswith("/older"):
+                return _FakeResponse(200, '{"datePublished":"2026-03-20T19:34:11.667Z"}')
+            if url.endswith("/should-not-be-fetched"):
+                return _FakeResponse(200, '{"datePublished":"2026-03-29T18:00:00.000Z"}')
+            return _FakeResponse(404, "not found")
+
+        monkeypatch.setattr(release_discovery.requests, "get", fake_get)
+        monkeypatch.setattr(release_discovery.settings, "release_recent_window_hours", 72)
+        monkeypatch.setattr(release_discovery.settings, "release_max_links_per_source", 10)
+        monkeypatch.setattr(release_discovery.settings, "release_max_fetches_per_source", 10)
+        monkeypatch.setattr(release_discovery.settings, "release_request_jitter_seconds", 0)
+
+        result = release_discovery.discover_recent_releases(db, now_utc=now)
+
+        assert len(result) == 1
+        assert any(url.endswith("/newest") for url in urls_fetched)
+        assert any(url.endswith("/older") for url in urls_fetched)
+        assert not any(url.endswith("/should-not-be-fetched") for url in urls_fetched)
+    finally:
+        db.close()

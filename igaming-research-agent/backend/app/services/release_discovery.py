@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import ReleaseSource
+from app.services.portal_scrapers import resolve_listing_parser
 
 logger = logging.getLogger(__name__)
 
@@ -650,12 +651,25 @@ def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = No
         source_domain = urlparse(source.source_url).netloc
         source_fetch_budget = max(1, settings.release_max_fetches_per_source)
         source_links_limit = max(1, settings.release_max_links_per_source)
-        for href in _extract_hrefs(listing_html):
+        listing_empty_reason = "no_candidate_links"
+        listing_candidates: list[str] = []
+        parser = resolve_listing_parser(source.source_url, source.company_name)
+        if parser is not None:
+            parse_result = parser.parse_listing(listing_html, source.source_url, source.company_name)
+            listing_candidates = parse_result.candidate_urls
+            if parse_result.empty_reason:
+                listing_empty_reason = parse_result.empty_reason
+        else:
+            listing_candidates = _extract_hrefs(listing_html)
+
+        for href in listing_candidates:
             if not _is_valid_candidate_href(href):
                 continue
 
             absolute_url = urljoin(source.source_url, href)
-            if absolute_url in seen_urls or not _looks_like_release_link(absolute_url):
+            if absolute_url in seen_urls:
+                continue
+            if parser is None and not _looks_like_release_link(absolute_url):
                 continue
 
             parsed = urlparse(absolute_url)
@@ -721,6 +735,8 @@ def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = No
             run_pages_success += 1
 
             published_date = _extract_published_date(article_html)
+            if parser is not None:
+                published_date = parser.extract_article_published_date(article_html) or published_date
             if published_date is None:
                 source_stats["rejected_missing_date"] += 1
                 _log_page_result(
@@ -749,6 +765,13 @@ def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = No
                     duration_ms=int(article_meta.get("duration_ms", 0)),
                     retries_used=int(article_meta.get("retries_used", 0)),
                 )
+                if (
+                    parser is not None
+                    and published_date < cutoff
+                    and parser.is_likely_descending_chronological()
+                ):
+                    # Newest->oldest listings allow stopping after first stale hit.
+                    break
                 continue
 
             title = _extract_title(article_html, fallback=f"{source.company_name} release")
@@ -791,7 +814,7 @@ def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = No
                 stage="listing",
                 result="success",
                 scraped_relevant=0,
-                reason="no_candidate_links",
+                reason=listing_empty_reason,
                 http_status=listing_meta.get("status_code"),
                 duration_ms=int(listing_meta.get("duration_ms", 0)),
                 retries_used=int(listing_meta.get("retries_used", 0)),
