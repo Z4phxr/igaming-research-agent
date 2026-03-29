@@ -102,7 +102,9 @@ describe('api service', () => {
     await getReleaseSources();
     await createReleaseSource({
       company_name: 'IGT',
+      category: 'Slot provider',
       source_url: 'https://www.igt.com/explore-igt/news/news',
+      notes: 'Test notes',
       is_active: true,
     });
     await updateReleaseSource(1, { is_active: false });
@@ -111,7 +113,9 @@ describe('api service', () => {
     expect(getSpy).toHaveBeenCalledWith('/release-sources');
     expect(postSpy).toHaveBeenCalledWith('/release-sources', {
       company_name: 'IGT',
+      category: 'Slot provider',
       source_url: 'https://www.igt.com/explore-igt/news/news',
+      notes: 'Test notes',
       is_active: true,
     });
     expect(putSpy).toHaveBeenCalledWith('/release-sources/1', { is_active: false });

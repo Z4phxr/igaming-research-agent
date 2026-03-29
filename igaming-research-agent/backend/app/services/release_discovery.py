@@ -106,7 +106,7 @@ def _extract_published_date(html: str) -> datetime.datetime | None:
 def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = None) -> list[dict]:
     """Scan configured source pages and return releases published in last 24h."""
     now = now_utc or datetime.datetime.utcnow()
-    cutoff = now - datetime.timedelta(hours=24)
+    cutoff = now - datetime.timedelta(hours=72)
 
     active_sources = (
         db.query(ReleaseSource)

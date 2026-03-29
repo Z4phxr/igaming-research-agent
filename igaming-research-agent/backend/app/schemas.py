@@ -86,7 +86,9 @@ class ArticleFeedbackOut(BaseModel):
 
 class ReleaseSourceBase(BaseModel):
     company_name: str = Field(..., min_length=1, max_length=255)
+    category: str = Field(..., min_length=1, max_length=64)
     source_url: str = Field(..., min_length=1, max_length=2048)
+    notes: Optional[str] = Field(None, max_length=1024)
     is_active: bool = True
 
 
@@ -96,7 +98,9 @@ class ReleaseSourceCreate(ReleaseSourceBase):
 
 class ReleaseSourceUpdate(BaseModel):
     company_name: Optional[str] = Field(None, min_length=1, max_length=255)
+    category: Optional[str] = Field(None, min_length=1, max_length=64)
     source_url: Optional[str] = Field(None, min_length=1, max_length=2048)
+    notes: Optional[str] = Field(None, max_length=1024)
     is_active: Optional[bool] = None
 
 

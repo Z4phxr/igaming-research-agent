@@ -25,7 +25,10 @@ export default function Settings() {
   const [queries, setQueries] = useState<Query[]>([]);
   const [releaseSources, setReleaseSources] = useState<ReleaseSource[]>([]);
   const [companyName, setCompanyName] = useState('');
+  const [category, setCategory] = useState('Operator');
   const [sourceUrl, setSourceUrl] = useState('');
+  const [notes, setNotes] = useState('');
+  const [savingSourceId, setSavingSourceId] = useState<number | null>(null);
 
   const loadQueries = async () => {
     setLoading(true);
@@ -138,23 +141,57 @@ export default function Settings() {
 
   const submitReleaseSource = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!companyName.trim() || !sourceUrl.trim()) {
-      setError('Company name and source URL are required');
+    if (!companyName.trim() || !category.trim() || !sourceUrl.trim()) {
+      setError('Company name, category and source URL are required');
       return;
     }
 
     try {
       await createReleaseSource({
         company_name: companyName.trim(),
+        category: category.trim(),
         source_url: sourceUrl.trim(),
+        notes: notes.trim() || undefined,
         is_active: true,
       });
       setCompanyName('');
+      setCategory('Operator');
       setSourceUrl('');
+      setNotes('');
       setError('');
       await loadReleaseSources();
     } catch {
       setError('Unable to save release source');
+    }
+  };
+
+  const updateReleaseSourceField = (sourceId: number, field: keyof ReleaseSource, value: string | boolean) => {
+    setReleaseSources((current) =>
+      current.map((item) => (item.id === sourceId ? { ...item, [field]: value } : item)),
+    );
+  };
+
+  const saveReleaseSource = async (source: ReleaseSource) => {
+    if (!source.company_name.trim() || !source.category.trim() || !source.source_url.trim()) {
+      setError('Company name, category and source URL are required');
+      return;
+    }
+
+    setSavingSourceId(source.id);
+    try {
+      await updateReleaseSource(source.id, {
+        company_name: source.company_name.trim(),
+        category: source.category.trim(),
+        source_url: source.source_url.trim(),
+        notes: source.notes?.trim() || '',
+        is_active: source.is_active,
+      });
+      setError('');
+      await loadReleaseSources();
+    } catch {
+      setError('Unable to save release source changes');
+    } finally {
+      setSavingSourceId(null);
     }
   };
 
@@ -334,6 +371,19 @@ export default function Settings() {
           </div>
 
           <div>
+            <label htmlFor="category" className="mb-1 block text-[12px] uppercase tracking-[0.05em] text-[#888888]">
+              Category
+            </label>
+            <input
+              id="category"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              required
+              className="w-full rounded-md border border-[#333333] bg-[#0a0a0a] px-3.5 py-2.5 text-sm text-white outline-none transition-colors focus:border-[#2563eb]"
+            />
+          </div>
+
+          <div>
             <label htmlFor="sourceUrl" className="mb-1 block text-[12px] uppercase tracking-[0.05em] text-[#888888]">
               Source URL
             </label>
@@ -343,6 +393,19 @@ export default function Settings() {
               onChange={(e) => setSourceUrl(e.target.value)}
               required
               placeholder="https://www.igt.com/explore-igt/news/news"
+              className="w-full rounded-md border border-[#333333] bg-[#0a0a0a] px-3.5 py-2.5 text-sm text-white outline-none transition-colors focus:border-[#2563eb]"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="notes" className="mb-1 block text-[12px] uppercase tracking-[0.05em] text-[#888888]">
+              Notes
+            </label>
+            <textarea
+              id="notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
               className="w-full rounded-md border border-[#333333] bg-[#0a0a0a] px-3.5 py-2.5 text-sm text-white outline-none transition-colors focus:border-[#2563eb]"
             />
           </div>
@@ -366,16 +429,46 @@ export default function Settings() {
               <thead>
                 <tr className="bg-[#1a1a1a] text-[11px] uppercase tracking-[0.08em] text-[#555555]">
                   <th className="px-4 py-3">Company</th>
+                  <th className="px-4 py-3">Category</th>
                   <th className="px-4 py-3">Source URL</th>
+                  <th className="px-4 py-3">Notes</th>
                   <th className="px-4 py-3">Active</th>
+                  <th className="px-4 py-3">Save</th>
                   <th className="px-4 py-3">Delete</th>
                 </tr>
               </thead>
               <tbody>
                 {releaseSources.map((source) => (
                   <tr key={source.id} className="border-b border-[#222222] bg-[#111111] transition-colors hover:bg-[#151515]">
-                    <td className="px-4 py-3 text-white">{source.company_name}</td>
-                    <td className="px-4 py-3 text-[#888888] break-all">{source.source_url}</td>
+                    <td className="px-4 py-3">
+                      <input
+                        value={source.company_name}
+                        onChange={(e) => updateReleaseSourceField(source.id, 'company_name', e.target.value)}
+                        className="w-full rounded-md border border-[#333333] bg-[#0a0a0a] px-2.5 py-1.5 text-sm text-white outline-none transition-colors focus:border-[#2563eb]"
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <input
+                        value={source.category}
+                        onChange={(e) => updateReleaseSourceField(source.id, 'category', e.target.value)}
+                        className="w-full rounded-md border border-[#333333] bg-[#0a0a0a] px-2.5 py-1.5 text-sm text-white outline-none transition-colors focus:border-[#2563eb]"
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <input
+                        value={source.source_url}
+                        onChange={(e) => updateReleaseSourceField(source.id, 'source_url', e.target.value)}
+                        className="w-full rounded-md border border-[#333333] bg-[#0a0a0a] px-2.5 py-1.5 text-sm text-white outline-none transition-colors focus:border-[#2563eb]"
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <textarea
+                        value={source.notes || ''}
+                        onChange={(e) => updateReleaseSourceField(source.id, 'notes', e.target.value)}
+                        rows={2}
+                        className="w-full rounded-md border border-[#333333] bg-[#0a0a0a] px-2.5 py-1.5 text-sm text-white outline-none transition-colors focus:border-[#2563eb]"
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <button
                         type="button"
@@ -390,6 +483,16 @@ export default function Settings() {
                             source.is_active ? 'translate-x-5' : 'translate-x-0'
                           }`}
                         />
+                      </button>
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        className="text-[#2563eb] transition-colors hover:text-white disabled:opacity-50"
+                        disabled={savingSourceId === source.id}
+                        onClick={() => void saveReleaseSource(source)}
+                      >
+                        {savingSourceId === source.id ? 'Saving...' : 'Save'}
                       </button>
                     </td>
                     <td className="px-4 py-3">

@@ -42,7 +42,9 @@ export interface Report {
 export interface ReleaseSource {
   id: number;
   company_name: string;
+  category: string;
   source_url: string;
+  notes?: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -50,13 +52,17 @@ export interface ReleaseSource {
 
 export interface CreateReleaseSourceDto {
   company_name: string;
+  category: string;
   source_url: string;
+  notes?: string;
   is_active: boolean;
 }
 
 export interface UpdateReleaseSourceDto {
   company_name?: string;
+  category?: string;
   source_url?: string;
+  notes?: string;
   is_active?: boolean;
 }
 

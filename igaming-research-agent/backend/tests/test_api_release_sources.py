@@ -3,7 +3,9 @@ def test_release_source_crud_flow(client):
         "/api/release-sources",
         json={
             "company_name": "IGT",
+            "category": "Slot provider",
             "source_url": "https://www.igt.com/explore-igt/news/news",
+            "notes": "Test notes",
             "is_active": True,
         },
     )
@@ -11,6 +13,8 @@ def test_release_source_crud_flow(client):
     assert created.status_code == 201
     body = created.json()
     assert body["company_name"] == "IGT"
+    assert body["category"] == "Slot provider"
+    assert body["notes"] == "Test notes"
     assert body["is_active"] is True
 
     listing = client.get("/api/release-sources")
@@ -33,7 +37,9 @@ def test_release_source_crud_flow(client):
 def test_release_source_rejects_duplicates(client):
     payload = {
         "company_name": "IGT",
+        "category": "Slot provider",
         "source_url": "https://www.igt.com/explore-igt/news/news",
+        "notes": "Test notes",
         "is_active": True,
     }
 

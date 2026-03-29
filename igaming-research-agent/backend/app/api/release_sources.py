@@ -17,11 +17,14 @@ def list_release_sources(db: Session = Depends(get_db)):
 
 @router.post("", response_model=ReleaseSourceOut, status_code=status.HTTP_201_CREATED)
 def create_release_source(payload: ReleaseSourceCreate, db: Session = Depends(get_db)):
-    existing = db.query(ReleaseSourceModel).filter(ReleaseSourceModel.source_url == payload.source_url).first()
+    normalized_url = payload.source_url.strip()
+    existing = db.query(ReleaseSourceModel).filter(ReleaseSourceModel.source_url == normalized_url).first()
     if existing is not None:
         raise HTTPException(status_code=409, detail="Release source already exists")
 
-    item = ReleaseSourceModel(**payload.model_dump())
+    data = payload.model_dump()
+    data["source_url"] = normalized_url
+    item = ReleaseSourceModel(**data)
     db.add(item)
     db.commit()
     db.refresh(item)
@@ -36,6 +39,7 @@ def update_release_source(source_id: int, payload: ReleaseSourceUpdate, db: Sess
 
     updates = payload.model_dump(exclude_unset=True)
     if "source_url" in updates:
+        updates["source_url"] = str(updates["source_url"]).strip()
         duplicate = (
             db.query(ReleaseSourceModel)
             .filter(ReleaseSourceModel.source_url == updates["source_url"], ReleaseSourceModel.id != source_id)

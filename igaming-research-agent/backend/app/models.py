@@ -143,7 +143,9 @@ class ReleaseSource(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     company_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    category: Mapped[str] = mapped_column(String(64), default="", nullable=False, index=True)
     source_url: Mapped[str] = mapped_column(String(2048), unique=True, nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime.datetime] = mapped_column(
@@ -157,3 +159,4 @@ class ReleaseSource(Base):
 Index("ix_articles_score", Article.score)
 Index("ix_articles_scraped_date", Article.scraped_date)
 Index("ix_release_sources_company_name", ReleaseSource.company_name)
+Index("ix_release_sources_category", ReleaseSource.category)
