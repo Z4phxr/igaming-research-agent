@@ -8,6 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_env: str = "development"
+    app_log_level: str = "INFO"
     database_url: str
     frontend_origin: str = "http://localhost:3000"
 

@@ -3,6 +3,7 @@
 TODO: Add structured logging middleware and health endpoint metadata.
 """
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -15,6 +16,27 @@ from app.config import settings
 from app.database import init_db
 from app import models  # noqa: F401
 from app.services.scheduler import start_scheduler, stop_scheduler
+
+
+def _configure_app_logging() -> None:
+    """Configure app logger so INFO-level service logs are visible in container output."""
+    level_name = (settings.app_log_level or "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+
+    app_logger = logging.getLogger("app")
+    app_logger.setLevel(level)
+
+    if not app_logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setLevel(level)
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+        app_logger.addHandler(handler)
+
+    # Avoid duplicated lines when parent/root handlers are present.
+    app_logger.propagate = False
+
+
+_configure_app_logging()
 
 
 @asynccontextmanager
