@@ -17,6 +17,8 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
+RELEASE_SOURCE_MIGRATION_NAME = "2026_03_29_release_sources_baseline"
+
 DEFAULT_RELEASE_SOURCES: list[dict[str, str]] = [
     {
         "company_name": "FanDuel",
@@ -198,6 +200,18 @@ DEFAULT_RELEASE_SOURCES: list[dict[str, str]] = [
         "source_url": "https://www.americangaming.org/newsroom/",
         "notes": "Branzowy trade body, regulatory",
     },
+    {
+        "company_name": "NJ Division of Gaming Enforcement",
+        "category": "Regulator stanowy",
+        "source_url": "https://www.njoag.gov/about/divisions-and-offices/division-of-gaming-enforcement-home/news-and-updates/",
+        "notes": "NJ - najwazniejszy stan iGaming US",
+    },
+    {
+        "company_name": "Pennsylvania Gaming Control Board",
+        "category": "Regulator stanowy",
+        "source_url": "https://gamingcontrolboard.pa.gov/news-media/press-releases",
+        "notes": "PA - drugi najwiekszy rynek",
+    },
 ]
 
 
@@ -224,7 +238,8 @@ def init_db() -> None:
     ensure_article_runtime_columns()
     ensure_report_runtime_columns()
     ensure_release_source_runtime_columns()
-    seed_release_sources()
+    ensure_app_migrations_table()
+    apply_release_source_data_migration()
 
 
 def ensure_article_runtime_columns() -> None:
@@ -301,15 +316,39 @@ def ensure_release_source_runtime_columns() -> None:
             connection.execute(text(statement))
 
 
-def seed_release_sources() -> None:
-    """Insert default release source list on first run when table is empty."""
+def ensure_app_migrations_table() -> None:
+    """Create internal migrations tracking table if it does not exist."""
     inspector = inspect(engine)
-    if "release_sources" not in inspector.get_table_names():
+    if "app_migrations" in inspector.get_table_names():
         return
 
     with engine.begin() as connection:
-        existing_count = connection.execute(text("SELECT COUNT(*) FROM release_sources")).scalar() or 0
-        if existing_count > 0:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE app_migrations (
+                    name VARCHAR(255) PRIMARY KEY,
+                    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+
+
+def apply_release_source_data_migration() -> None:
+    """Apply one-time data migration that inserts baseline release sources."""
+    inspector = inspect(engine)
+    if "release_sources" not in inspector.get_table_names():
+        return
+    if "app_migrations" not in inspector.get_table_names():
+        return
+
+    with engine.begin() as connection:
+        already_applied = connection.execute(
+            text("SELECT 1 FROM app_migrations WHERE name = :name LIMIT 1"),
+            {"name": RELEASE_SOURCE_MIGRATION_NAME},
+        ).scalar()
+        if already_applied:
             return
 
         insert_stmt = text(
@@ -318,7 +357,13 @@ def seed_release_sources() -> None:
             VALUES (:company_name, :category, :source_url, :notes, :is_active)
             """
         )
+
+        exists_stmt = text("SELECT 1 FROM release_sources WHERE source_url = :source_url LIMIT 1")
         for source in DEFAULT_RELEASE_SOURCES:
+            exists = connection.execute(exists_stmt, {"source_url": source["source_url"]}).scalar()
+            if exists:
+                continue
+
             connection.execute(
                 insert_stmt,
                 {
@@ -329,3 +374,8 @@ def seed_release_sources() -> None:
                     "is_active": 1,
                 },
             )
+
+        connection.execute(
+            text("INSERT INTO app_migrations (name) VALUES (:name)"),
+            {"name": RELEASE_SOURCE_MIGRATION_NAME},
+        )
