@@ -30,6 +30,10 @@ export const api = axios.create({
 
 function getApiErrorMessage(error: unknown, fallback: string): string {
   if (axios.isAxiosError(error)) {
+    if (error.code === 'ECONNABORTED' || String(error.message || '').toLowerCase().includes('timeout')) {
+      return 'Request timed out while waiting for backend health-check response. The source may be slow; try again in a moment.';
+    }
+
     if (!error.response) {
       return 'Cannot reach backend API. Check if Docker/Desktop backend is running and API proxy is available.';
     }
@@ -185,6 +189,7 @@ export async function runSingleReleaseSourceHealthCheck(
     const { data } = await api.post<SingleReleaseSourceHealthCheckResponse>(
       `/release-sources/health-check/${sourceId}`,
       {},
+      { timeout: 45000 },
     );
     return data;
   } catch (error) {
