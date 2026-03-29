@@ -18,6 +18,15 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     openai_api_key: str = ""
 
+    release_recent_window_hours: int = 72
+    release_listing_fetch_timeout_seconds: int = 20
+    release_fetch_timeout_seconds: int = 15
+    release_fetch_max_retries: int = 2
+    release_fetch_backoff_seconds: float = 1.0
+    release_max_links_per_source: int = 40
+    release_max_fetches_per_source: int = 80
+    release_fetch_user_agent: str = "Mozilla/5.0 (compatible; iGamingResearchAgent/1.0)"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
