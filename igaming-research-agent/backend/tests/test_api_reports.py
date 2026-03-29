@@ -77,6 +77,42 @@ def test_post_reports_run_returns_200_with_mocked_pipeline(client, db_session):
     assert body["articles_found"] == 3
 
 
+def test_post_reports_run_articles_returns_200_with_mocked_pipeline(client):
+    def fake_run_articles_pipeline(db, raise_on_error=False):
+        return {"articles_found": 5, "articles_saved": 4, "report_id": 1}
+
+    original = reports_api.run_articles_pipeline
+    reports_api.run_articles_pipeline = fake_run_articles_pipeline
+    try:
+        response = client.post("/api/reports/run/articles")
+    finally:
+        reports_api.run_articles_pipeline = original
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+    assert body["message"] == "Articles pipeline completed"
+    assert body["articles_found"] == 5
+
+
+def test_post_reports_run_releases_returns_200_with_mocked_pipeline(client):
+    def fake_run_release_pipeline(db, raise_on_error=False):
+        return {"releases_found": 2, "releases_saved": 2, "report_id": 1}
+
+    original = reports_api.run_release_pipeline
+    reports_api.run_release_pipeline = fake_run_release_pipeline
+    try:
+        response = client.post("/api/reports/run/releases")
+    finally:
+        reports_api.run_release_pipeline = original
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+    assert body["message"] == "Releases pipeline completed"
+    assert body["releases_found"] == 2
+
+
 def test_get_reports_latest_returns_most_recent_report(client, db_session):
     older = Report(
         report_date=datetime.date(2026, 3, 20),

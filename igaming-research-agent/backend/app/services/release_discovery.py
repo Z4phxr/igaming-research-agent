@@ -61,9 +61,62 @@ def _extract_hrefs(html: str) -> list[str]:
     return [href.strip() for href in hrefs if href and href.strip()]
 
 
+def _is_same_site(base_url: str, candidate_url: str) -> bool:
+    base_host = (urlparse(base_url).netloc or "").lower().lstrip("www.")
+    candidate_host = (urlparse(candidate_url).netloc or "").lower().lstrip("www.")
+    if not base_host or not candidate_host:
+        return False
+    return candidate_host == base_host or candidate_host.endswith(f".{base_host}") or base_host.endswith(f".{candidate_host}")
+
+
+def _is_valid_candidate_href(href: str) -> bool:
+    token = (href or "").strip().lower()
+    if not token:
+        return False
+    if token.startswith("#"):
+        return False
+    if token.startswith("javascript:") or token.startswith("mailto:") or token.startswith("tel:"):
+        return False
+    if "{{" in token or "}}" in token:
+        return False
+    return True
+
+
 def _looks_like_release_link(url: str) -> bool:
     token = url.lower()
-    return any(word in token for word in ["news", "press", "release", "announcement", "investor"])
+    if any(ext in token for ext in [".css", ".js", ".ico", ".png", ".jpg", ".jpeg", ".svg", ".pdf"]):
+        return False
+
+    # Prefer article-level detail pages instead of broad nav pages.
+    has_release_section = any(
+        word in token
+        for word in ["/news-release", "/news-releases", "/press-release", "/press-releases", "/news/"]
+    )
+    has_detail_hint = bool(
+        re.search(r"/(20\d{2}[/-]\d{1,2}[/-]\d{1,2}|\d{6,}|[a-z0-9-]+\.html?)", token)
+    )
+    if not has_release_section:
+        return False
+
+    # Skip common non-article investor navigation pages.
+    if any(
+        blocked in token
+        for blocked in [
+            "/overview",
+            "/events",
+            "/stock",
+            "/financial",
+            "/resources",
+            "/governance",
+            "/contact",
+            "/alerts",
+            "/faq",
+            "/default.aspx",
+        ]
+    ):
+        return False
+
+    return has_detail_hint
 
 
 def _fetch_html(url: str, timeout: int = 15) -> str | None:
@@ -125,12 +178,17 @@ def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = No
 
         source_domain = urlparse(source.source_url).netloc
         for href in _extract_hrefs(listing_html):
+            if not _is_valid_candidate_href(href):
+                continue
+
             absolute_url = urljoin(source.source_url, href)
             if absolute_url in seen_urls or not _looks_like_release_link(absolute_url):
                 continue
 
             parsed = urlparse(absolute_url)
             if not parsed.scheme.startswith("http"):
+                continue
+            if not _is_same_site(source.source_url, absolute_url):
                 continue
 
             seen_urls.add(absolute_url)

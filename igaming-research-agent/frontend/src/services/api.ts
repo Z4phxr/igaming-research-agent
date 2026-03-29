@@ -205,3 +205,53 @@ export async function runPipeline(): Promise<{ status: string; message: string; 
     throw new Error(getApiErrorMessage(error, 'Failed to run pipeline.'));
   }
 }
+
+export async function runArticlesPipeline(): Promise<{ status: string; message: string; articles_found?: number }> {
+  try {
+    const { data } = await api.post<{ status: string; message: string; articles_found?: number }>(
+      '/reports/run/articles',
+      {},
+      { timeout: 300000 },
+    );
+    return data;
+  } catch (error) {
+    if (axios.isAxiosError(error) && !error.response) {
+      try {
+        const { data } = await axios.post<{ status: string; message: string; articles_found?: number }>(
+          '/api/reports/run/articles',
+          {},
+          { timeout: 300000 },
+        );
+        return data;
+      } catch (fallbackError) {
+        throw new Error(getApiErrorMessage(fallbackError, 'Failed to run articles pipeline.'));
+      }
+    }
+    throw new Error(getApiErrorMessage(error, 'Failed to run articles pipeline.'));
+  }
+}
+
+export async function runReleasesPipeline(): Promise<{ status: string; message: string; releases_found?: number }> {
+  try {
+    const { data } = await api.post<{ status: string; message: string; releases_found?: number }>(
+      '/reports/run/releases',
+      {},
+      { timeout: 300000 },
+    );
+    return data;
+  } catch (error) {
+    if (axios.isAxiosError(error) && !error.response) {
+      try {
+        const { data } = await axios.post<{ status: string; message: string; releases_found?: number }>(
+          '/api/reports/run/releases',
+          {},
+          { timeout: 300000 },
+        );
+        return data;
+      } catch (fallbackError) {
+        throw new Error(getApiErrorMessage(fallbackError, 'Failed to run releases pipeline.'));
+      }
+    }
+    throw new Error(getApiErrorMessage(error, 'Failed to run releases pipeline.'));
+  }
+}

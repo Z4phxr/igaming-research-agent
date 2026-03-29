@@ -6,7 +6,8 @@ import {
   deleteQuery,
   getReleaseSources,
   getQueries,
-  runPipeline,
+  runArticlesPipeline,
+  runReleasesPipeline,
   updateReleaseSource,
   updateQuery,
 } from '@/services/api';
@@ -15,8 +16,10 @@ import type { CreateQueryDto, Query, ReleaseSource } from '@/types';
 export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [runningPipeline, setRunningPipeline] = useState(false);
-  const [pipelineMessage, setPipelineMessage] = useState('');
+  const [runningArticlesPipeline, setRunningArticlesPipeline] = useState(false);
+  const [runningReleasesPipeline, setRunningReleasesPipeline] = useState(false);
+  const [articlesPipelineMessage, setArticlesPipelineMessage] = useState('');
+  const [releasesPipelineMessage, setReleasesPipelineMessage] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [streamType, setStreamType] = useState('legislative');
   const [description, setDescription] = useState('');
@@ -124,18 +127,33 @@ export default function Settings() {
     return 'bg-[#14532d] text-[#16a34a]';
   };
 
-  const handleRunPipeline = async () => {
-    setRunningPipeline(true);
-    setPipelineMessage('');
+  const handleRunArticlesPipeline = async () => {
+    setRunningArticlesPipeline(true);
+    setArticlesPipelineMessage('');
     setError('');
     try {
-      const result = await runPipeline();
-      setPipelineMessage(result.message);
+      const result = await runArticlesPipeline();
+      setArticlesPipelineMessage(result.message);
       await loadQueries();
     } catch (pipelineError) {
       setError(pipelineError instanceof Error ? pipelineError.message : 'Unable to run pipeline');
     } finally {
-      setRunningPipeline(false);
+      setRunningArticlesPipeline(false);
+    }
+  };
+
+  const handleRunReleasesPipeline = async () => {
+    setRunningReleasesPipeline(true);
+    setReleasesPipelineMessage('');
+    setError('');
+    try {
+      const result = await runReleasesPipeline();
+      setReleasesPipelineMessage(result.message);
+      await loadReleaseSources();
+    } catch (pipelineError) {
+      setError(pipelineError instanceof Error ? pipelineError.message : 'Unable to run release pipeline');
+    } finally {
+      setRunningReleasesPipeline(false);
     }
   };
 
@@ -226,7 +244,8 @@ export default function Settings() {
         <h2 className="text-3xl font-semibold text-white">Query Manager</h2>
       </div>
 
-      {pipelineMessage && <p className="text-center text-sm text-[#16a34a]">{pipelineMessage}</p>}
+      {articlesPipelineMessage && <p className="text-center text-sm text-[#16a34a]">{articlesPipelineMessage}</p>}
+      {releasesPipelineMessage && <p className="text-center text-sm text-[#16a34a]">{releasesPipelineMessage}</p>}
 
       <form onSubmit={submit} className="mx-auto w-full max-w-3xl space-y-4 rounded-lg border border-[#222222] bg-[#111111] p-5">
         <div>
@@ -513,14 +532,24 @@ export default function Settings() {
       </div>
 
       <div className="flex flex-col items-center gap-2">
-        <button
-          type="button"
-          onClick={() => void handleRunPipeline()}
-          disabled={runningPipeline}
-          className="rounded-md bg-[#2563eb] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1d4ed8] disabled:opacity-50"
-        >
-          {runningPipeline ? 'Running pipeline...' : 'Run Pipeline'}
-        </button>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => void handleRunArticlesPipeline()}
+            disabled={runningArticlesPipeline}
+            className="rounded-md bg-[#2563eb] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1d4ed8] disabled:opacity-50"
+          >
+            {runningArticlesPipeline ? 'Running articles...' : 'Run Articles Pipeline'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleRunReleasesPipeline()}
+            disabled={runningReleasesPipeline}
+            className="rounded-md bg-[#16a34a] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#15803d] disabled:opacity-50"
+          >
+            {runningReleasesPipeline ? 'Running releases...' : 'Run Releases Pipeline'}
+          </button>
+        </div>
       </div>
     </section>
   );

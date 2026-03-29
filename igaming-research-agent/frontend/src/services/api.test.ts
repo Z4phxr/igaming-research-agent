@@ -9,6 +9,8 @@ import {
   getReleaseSources,
   getReportById,
   getReports,
+  runArticlesPipeline,
+  runReleasesPipeline,
   submitArticleFeedback,
   updateReleaseSource,
   updateQuery,
@@ -125,5 +127,18 @@ describe('api service', () => {
     postSpy.mockRestore();
     putSpy.mockRestore();
     deleteSpy.mockRestore();
+  });
+
+  it('calls separate pipeline run endpoints', async () => {
+    const postSpy = vi.spyOn(api, 'post').mockResolvedValue({
+      data: { status: 'success', message: 'ok' },
+    });
+
+    await runArticlesPipeline();
+    await runReleasesPipeline();
+
+    expect(postSpy).toHaveBeenCalledWith('/reports/run/articles', {}, { timeout: 300000 });
+    expect(postSpy).toHaveBeenCalledWith('/reports/run/releases', {}, { timeout: 300000 });
+    postSpy.mockRestore();
   });
 });

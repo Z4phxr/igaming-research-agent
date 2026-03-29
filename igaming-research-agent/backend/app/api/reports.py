@@ -12,7 +12,7 @@ from app.models import Article as ArticleModel
 from app.models import ArticleFeedback as ArticleFeedbackModel
 from app.models import Report as ReportModel
 from app.schemas import ArticleFeedbackCreate, ReportSummaryOut
-from app.services.scheduler import run_daily_pipeline
+from app.services.scheduler import run_articles_pipeline, run_daily_pipeline, run_release_pipeline
 
 router = APIRouter()
 feedback_router = APIRouter()
@@ -124,6 +124,56 @@ def run_reports_pipeline(db: Session = Depends(get_db)):
         "status": "success",
         "message": "Pipeline completed",
         "articles_found": articles_found,
+    }
+
+
+@router.post("/run/articles")
+def run_articles_only_pipeline(db: Session = Depends(get_db)):
+    try:
+        result = run_articles_pipeline(db, raise_on_error=True)
+    except Exception as exc:
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(exc)},
+        )
+
+    articles_found = int(result.get("articles_found", 0) or 0)
+    if articles_found == 0:
+        return {
+            "status": "success",
+            "message": "Articles pipeline ran but found no articles",
+            "articles_found": 0,
+        }
+
+    return {
+        "status": "success",
+        "message": "Articles pipeline completed",
+        "articles_found": articles_found,
+    }
+
+
+@router.post("/run/releases")
+def run_releases_only_pipeline(db: Session = Depends(get_db)):
+    try:
+        result = run_release_pipeline(db, raise_on_error=True)
+    except Exception as exc:
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(exc)},
+        )
+
+    releases_found = int(result.get("releases_found", 0) or 0)
+    if releases_found == 0:
+        return {
+            "status": "success",
+            "message": "Releases pipeline ran but found no releases",
+            "releases_found": 0,
+        }
+
+    return {
+        "status": "success",
+        "message": "Releases pipeline completed",
+        "releases_found": releases_found,
     }
 
 

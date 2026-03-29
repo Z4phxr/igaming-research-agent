@@ -4,6 +4,7 @@ TODO: Replace metadata create_all with migration-based schema management.
 """
 
 import os
+from urllib.parse import urlparse
 
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -17,7 +18,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
-RELEASE_SOURCE_MIGRATION_NAME = "2026_03_29_release_sources_baseline"
+RELEASE_SOURCE_MIGRATION_NAME = "2026_03_29_release_sources_full_refresh"
 
 DEFAULT_RELEASE_SOURCES: list[dict[str, str]] = [
     {
@@ -209,8 +210,92 @@ DEFAULT_RELEASE_SOURCES: list[dict[str, str]] = [
     {
         "company_name": "Pennsylvania Gaming Control Board",
         "category": "Regulator stanowy",
-        "source_url": "https://gamingcontrolboard.pa.gov/news-media/press-releases",
+        "source_url": "https://gamingcontrolboard.pa.gov/news-and-transparency/press-release",
         "notes": "PA - drugi najwiekszy rynek",
+    },
+    {
+        "company_name": "Michigan Gaming Control Board",
+        "category": "Regulator stanowy",
+        "source_url": "https://www.michigan.gov/mgcb/news",
+        "notes": "MI - iGaming + sportsbook",
+    },
+    {
+        "company_name": "Nevada Gaming Control Board",
+        "category": "Regulator stanowy",
+        "source_url": "https://www.gaming.nv.gov/about-us/press-releases-public-statements/",
+        "notes": "NV - Vegas, poker online, NGCB",
+    },
+    {
+        "company_name": "New York State Gaming Commission",
+        "category": "Regulator stanowy",
+        "source_url": "https://gaming.ny.gov/newsroom",
+        "notes": "NY - najwiekszy rynek sportsbook US",
+    },
+    {
+        "company_name": "Illinois Gaming Board",
+        "category": "Regulator stanowy",
+        "source_url": "https://igb.illinois.gov/news/press-releases.html",
+        "notes": "IL - 2. rynek sportsbook, online casino pending",
+    },
+    {
+        "company_name": "Ohio Casino Control Commission",
+        "category": "Regulator stanowy",
+        "source_url": "https://casinocontrol.ohio.gov/home/news-and-events/all-news/",
+        "notes": "OH - sportsbook + kasyna",
+    },
+    {
+        "company_name": "Colorado Division of Gaming",
+        "category": "Regulator stanowy",
+        "source_url": "https://sbg.colorado.gov/press-releases",
+        "notes": "CO - mobile sportsbook, regulacje",
+    },
+    {
+        "company_name": "West Virginia Lottery (iGaming)",
+        "category": "Regulator stanowy",
+        "source_url": "https://wvlottery.com/news-and-winning/news-and-offers/news-and-events",
+        "notes": "WV - iGaming + sportsbook regulacje",
+    },
+    {
+        "company_name": "Connecticut DOSR",
+        "category": "Regulator stanowy",
+        "source_url": "https://portal.ct.gov/dcp/gaming-division/gaming/gaming-division-news?language=en_US",
+        "notes": "CT - sportsbook + iGaming",
+    },
+    {
+        "company_name": "National Indian Gaming Commission",
+        "category": "Regulator stanowy",
+        "source_url": "https://www.nigc.gov/downloads/news/",
+        "notes": "Federalny regulator tribal gaming US",
+    },
+    {
+        "company_name": "Sports Betting Alliance (SBA)",
+        "category": "Org. branzowa",
+        "source_url": "https://sportsbettingalliance.org/about/",
+        "notes": "FanDuel, DK, BetMGM, Fanatics, bet365",
+    },
+    {
+        "company_name": "Responsible Gambling Council",
+        "category": "Org. branzowa",
+        "source_url": "https://www.responsiblegambling.org/news",
+        "notes": "Responsible gaming standards US/CA",
+    },
+    {
+        "company_name": "PrizePicks",
+        "category": "DFS",
+        "source_url": "https://www.prizepicks.com/newsroom",
+        "notes": "Pick'em DFS, obecny w wielu stanach",
+    },
+    {
+        "company_name": "Kalshi",
+        "category": "Org. branzowa",
+        "source_url": "https://news.kalshi.com/t/announcements",
+        "notes": "CFTC-regulated prediction markets US",
+    },
+    {
+        "company_name": "Polymarket",
+        "category": "Org. branzowa",
+        "source_url": "https://www.prnewswire.com/news/polymarket/",
+        "notes": "Blockchain prediction market, US-focused",
     },
 ]
 
@@ -343,8 +428,28 @@ def ensure_app_migrations_table() -> None:
         )
 
 
+def _canonical_release_source_url(raw_url: str) -> str:
+    """Normalize release source URLs to keep seeded entries deduplicated."""
+    value = (raw_url or "").strip()
+    if not value:
+        return ""
+
+    if "://" not in value:
+        value = f"https://{value}"
+
+    parsed = urlparse(value)
+    scheme = (parsed.scheme or "https").lower()
+    netloc = parsed.netloc.lower()
+    path = parsed.path or ""
+
+    if path != "/":
+        path = path.rstrip("/")
+
+    return f"{scheme}://{netloc}{path}" if path else f"{scheme}://{netloc}"
+
+
 def apply_release_source_data_migration() -> None:
-    """Apply one-time data migration that inserts baseline release sources."""
+    """Apply baseline release sources with cleanup, dedupe, and idempotent upsert."""
     inspector = inspect(engine)
     if "release_sources" not in inspector.get_table_names():
         return
@@ -352,15 +457,68 @@ def apply_release_source_data_migration() -> None:
         return
 
     with engine.begin() as connection:
-        existing_count = connection.execute(text("SELECT COUNT(*) FROM release_sources")).scalar() or 0
-        already_applied = connection.execute(
-            text("SELECT 1 FROM app_migrations WHERE name = :name LIMIT 1"),
-            {"name": RELEASE_SOURCE_MIGRATION_NAME},
-        ).scalar()
+        rows = connection.execute(
+            text("SELECT id, company_name, category, source_url, notes, is_active FROM release_sources ORDER BY id ASC")
+        ).mappings().all()
 
-        # Self-heal: if migration marker exists but table is empty, repopulate defaults.
-        if already_applied and existing_count > 0:
-            return
+        # Deduplicate legacy rows by canonical URL, preserving the oldest record.
+        kept_ids_by_canonical: dict[str, int] = {}
+        duplicate_ids: list[int] = []
+        for row in rows:
+            canonical = _canonical_release_source_url(str(row["source_url"] or ""))
+            if not canonical:
+                continue
+            current_id = int(row["id"])
+            existing_id = kept_ids_by_canonical.get(canonical)
+            if existing_id is None:
+                kept_ids_by_canonical[canonical] = current_id
+            else:
+                duplicate_ids.append(current_id)
+
+        if duplicate_ids:
+            connection.execute(
+                text("DELETE FROM release_sources WHERE id = :id"),
+                [{"id": duplicate_id} for duplicate_id in duplicate_ids],
+            )
+
+        rows = connection.execute(
+            text("SELECT id, source_url FROM release_sources ORDER BY id ASC")
+        ).mappings().all()
+        id_by_canonical: dict[str, int] = {}
+        for row in rows:
+            source_id = int(row["id"])
+            canonical = _canonical_release_source_url(str(row["source_url"] or ""))
+            if not canonical:
+                continue
+
+            existing_id = id_by_canonical.get(canonical)
+            if existing_id is None:
+                id_by_canonical[canonical] = source_id
+                if canonical != str(row["source_url"] or ""):
+                    connection.execute(
+                        text(
+                            """
+                            UPDATE release_sources
+                            SET source_url = :source_url,
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE id = :id
+                            """
+                        ),
+                        {"source_url": canonical, "id": source_id},
+                    )
+                continue
+
+            # Safety net for collisions after normalization.
+            connection.execute(text("DELETE FROM release_sources WHERE id = :id"), {"id": source_id})
+
+        rows = connection.execute(
+            text("SELECT id, source_url FROM release_sources ORDER BY id ASC")
+        ).mappings().all()
+        id_by_canonical = {
+            _canonical_release_source_url(str(row["source_url"] or "")): int(row["id"])
+            for row in rows
+            if _canonical_release_source_url(str(row["source_url"] or ""))
+        }
 
         insert_stmt = text(
             """
@@ -369,25 +527,66 @@ def apply_release_source_data_migration() -> None:
             """
         )
 
-        exists_stmt = text("SELECT 1 FROM release_sources WHERE source_url = :source_url LIMIT 1")
+        update_stmt = text(
+            """
+            UPDATE release_sources
+            SET company_name = :company_name,
+                category = :category,
+                notes = :notes,
+                is_active = :is_active,
+                source_url = :source_url,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = :id
+            """
+        )
+
+        # Build a canonical, de-duplicated defaults map (last value wins for same URL).
+        defaults_by_canonical: dict[str, dict[str, str]] = {}
         for source in DEFAULT_RELEASE_SOURCES:
-            exists = connection.execute(exists_stmt, {"source_url": source["source_url"]}).scalar()
-            if exists:
+            canonical = _canonical_release_source_url(source["source_url"])
+            if not canonical:
+                continue
+            defaults_by_canonical[canonical] = {
+                "company_name": source["company_name"],
+                "category": source["category"],
+                "source_url": canonical,
+                "notes": source["notes"],
+            }
+
+        for canonical, source in defaults_by_canonical.items():
+            existing_id = id_by_canonical.get(canonical)
+            if existing_id is None:
+                connection.execute(
+                    insert_stmt,
+                    {
+                        "company_name": source["company_name"],
+                        "category": source["category"],
+                        "source_url": canonical,
+                        "notes": source["notes"],
+                        "is_active": True,
+                    },
+                )
                 continue
 
             connection.execute(
-                insert_stmt,
+                update_stmt,
                 {
+                    "id": existing_id,
                     "company_name": source["company_name"],
                     "category": source["category"],
-                    "source_url": source["source_url"],
+                    "source_url": canonical,
                     "notes": source["notes"],
                     "is_active": True,
                 },
             )
 
-        if not already_applied:
-            connection.execute(
-                text("INSERT INTO app_migrations (name) VALUES (:name)"),
-                {"name": RELEASE_SOURCE_MIGRATION_NAME},
-            )
+        connection.execute(
+            text(
+                """
+                INSERT INTO app_migrations (name)
+                VALUES (:name)
+                ON CONFLICT (name) DO NOTHING
+                """
+            ),
+            {"name": RELEASE_SOURCE_MIGRATION_NAME},
+        )
