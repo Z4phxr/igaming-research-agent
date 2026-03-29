@@ -353,8 +353,8 @@ def apply_release_source_data_migration() -> None:
 
         insert_stmt = text(
             """
-            INSERT INTO release_sources (company_name, category, source_url, notes, is_active)
-            VALUES (:company_name, :category, :source_url, :notes, :is_active)
+            INSERT INTO release_sources (company_name, category, source_url, notes, is_active, created_at, updated_at)
+            VALUES (:company_name, :category, :source_url, :notes, :is_active, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             """
         )
 
