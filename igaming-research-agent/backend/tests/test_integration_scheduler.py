@@ -1,3 +1,5 @@
+import datetime
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -47,7 +49,14 @@ def test_scheduler_pipeline_calls_services_in_order(monkeypatch):
 
     def fake_run_search_pipeline(db):
         calls.append("search")
-        return [{"title": "Story", "url": "https://example.com/story", "snippet": "x"}]
+        return [
+            {
+                "title": "Story",
+                "url": "https://example.com/story",
+                "snippet": "x",
+                "published_date": datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+            }
+        ]
 
     def fake_scrape_articles(articles):
         calls.append("scrape")

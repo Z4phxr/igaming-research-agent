@@ -6,8 +6,6 @@ End to end system covering data ingestion, information extraction, model driven 
 
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110-009688?logo=fastapi&logoColor=white)
-![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-D71F00?logo=sqlalchemy&logoColor=white)
-![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite&logoColor=white)
 ![APScheduler](https://img.shields.io/badge/APScheduler-cron%20orchestration-2E7D32)
 ![Anthropic](https://img.shields.io/badge/Anthropic-Claude%20Haiku%20and%20Sonnet-111111)
 ![Serper](https://img.shields.io/badge/Serper-News%20Search-4A90E2)
