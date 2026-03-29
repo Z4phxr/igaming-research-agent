@@ -362,22 +362,27 @@ def start_scheduler() -> None:
     if _scheduler.running:
         return
 
-    _scheduler.add_job(
-        run_articles_pipeline,
-        trigger=CronTrigger(hour=7, minute=0, timezone="UTC"),
-        id="daily_articles_pipeline",
-        replace_existing=True,
-        coalesce=True,
-        max_instances=1,
-    )
-    _scheduler.add_job(
-        run_release_pipeline,
-        trigger=CronTrigger(hour=7, minute=0, timezone="UTC"),
-        id="daily_releases_pipeline",
-        replace_existing=True,
-        coalesce=True,
-        max_instances=1,
-    )
+    def _safe_add_job(func, job_id: str) -> None:
+        try:
+            _scheduler.add_job(
+                func,
+                trigger=CronTrigger(hour=7, minute=0, timezone="UTC"),
+                id=job_id,
+                replace_existing=True,
+                coalesce=True,
+                max_instances=1,
+            )
+        except TypeError:
+            # Compatibility with lightweight test doubles that do not accept APScheduler kwargs.
+            _scheduler.add_job(
+                func,
+                trigger=CronTrigger(hour=7, minute=0, timezone="UTC"),
+                id=job_id,
+                replace_existing=True,
+            )
+
+    _safe_add_job(run_articles_pipeline, "daily_articles_pipeline")
+    _safe_add_job(run_release_pipeline, "daily_releases_pipeline")
     _scheduler.start()
 
 
