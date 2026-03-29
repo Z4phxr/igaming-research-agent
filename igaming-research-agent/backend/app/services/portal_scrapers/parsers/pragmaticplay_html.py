@@ -12,6 +12,8 @@ from app.services.portal_scrapers.base import ListingParseResult, PortalListingP
 class PragmaticPlayHtmlParser(PortalListingParser):
     """Parser for Pragmatic Play news listing pages."""
 
+    _ONCLICK_HREF_RE = re.compile(r"hrefTo\((['\"])(?P<url>.+?)\1\)", re.IGNORECASE)
+
     def matches(self, source_url: str, company_name: str) -> bool:
         token_url = (source_url or "").lower()
         token_name = (company_name or "").lower()
@@ -29,6 +31,62 @@ class PragmaticPlayHtmlParser(PortalListingParser):
         html = listing_html or ""
         soup = BeautifulSoup(html, "html.parser")
         links = soup.select("a[href*='/en/news/'][href]:not([href$='/en/news/'])")
+
+        card_items: list[dict[str, object]] = []
+        for card in soup.select("div.news div.news__box-white[onclick], div.news__box-white[onclick]"):
+            onclick_value = str(card.get("onclick") or "").strip()
+            if not onclick_value:
+                continue
+
+            match = self._ONCLICK_HREF_RE.search(onclick_value)
+            if not match:
+                continue
+
+            href = match.group("url").strip()
+            if not href:
+                continue
+
+            absolute_url = urljoin(source_url, href)
+            path = (urlparse(absolute_url).path or "").lower()
+            if path.endswith("/en/news"):
+                continue
+
+            title_node = card.select_one("h3.news__title")
+            title = re.sub(r"\s+", " ", title_node.get_text(" ", strip=True) if title_node else "").strip()
+            if len(title) < 10:
+                continue
+
+            date_node = card.select_one("p.news__date")
+            date_text = re.sub(r"\s+", " ", date_node.get_text(" ", strip=True) if date_node else "").strip()
+            published = self._parse_date(date_text)
+
+            card_items.append({"url": absolute_url, "title": title, "published": published})
+
+        if card_items:
+            seen_cards: set[str] = set()
+            for index, item in enumerate(card_items):
+                absolute_url = str(item["url"])
+                if absolute_url in seen_cards:
+                    continue
+
+                published = item.get("published")
+                if isinstance(published, datetime.datetime) and cutoff is not None and published < cutoff:
+                    if index == 0:
+                        result.empty_reason = "listing_first_pragmaticplay_item_outside_time_window"
+                        return result
+                    break
+
+                if isinstance(published, datetime.datetime) and now_utc is not None and published > now_utc:
+                    continue
+
+                seen_cards.add(absolute_url)
+                result.candidate_urls.append(absolute_url)
+                result.candidate_titles[absolute_url] = str(item.get("title") or "")
+                if isinstance(published, datetime.datetime):
+                    result.candidate_published_dates[absolute_url] = published
+
+            if result.candidate_urls:
+                return result
 
         if not links:
             lower_html = html.lower()

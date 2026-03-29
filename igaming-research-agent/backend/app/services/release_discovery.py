@@ -32,6 +32,11 @@ _TITLE_PATTERNS = [
 ]
 
 _TRANSIENT_HTTP_STATUS = {429, 500, 502, 503, 504}
+_SOURCE_LISTING_TIMEOUT_OVERRIDES_SECONDS = {
+    "investors.wynnresorts.com": 90,
+    "investors.pennentertainment.com": 90,
+    "www.ballys.com": 60,
+}
 
 
 def _new_source_stats(source: ReleaseSource) -> dict:
@@ -129,6 +134,42 @@ def _is_feed_source(source: ReleaseSource) -> bool:
         return False
     token = (source.source_url or "").lower()
     return any(part in token for part in ["/feed", "rss", "atom", "xml"])
+
+
+def _listing_timeout_for_source(source_url: str) -> int:
+    """Return effective listing timeout with per-domain floor for slow portals."""
+    base_timeout = max(1, int(settings.release_listing_fetch_timeout_seconds or 1))
+    host = urlparse(source_url or "").netloc.lower()
+    override_timeout = _SOURCE_LISTING_TIMEOUT_OVERRIDES_SECONDS.get(host)
+    if override_timeout is None:
+        return base_timeout
+    return max(base_timeout, int(override_timeout))
+
+
+def _listing_url_candidates(source_url: str) -> list[str]:
+    """Return preferred listing URL candidates for sources with known mirrored IR paths."""
+    parsed = urlparse(source_url or "")
+    host = (parsed.netloc or "").lower()
+    path = parsed.path or ""
+
+    candidates: list[str] = [source_url]
+
+    if host == "investors.wynnresorts.com":
+        if "/press-releases" in path:
+            candidates.append(source_url.replace("/press-releases", "/news-releases"))
+        candidates.append(f"{parsed.scheme}://{parsed.netloc}/news-releases")
+        candidates.append(f"{parsed.scheme}://{parsed.netloc}/news-releases/")
+
+    # Keep order while deduplicating.
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        token = (candidate or "").strip()
+        if not token or token in seen:
+            continue
+        deduped.append(token)
+        seen.add(token)
+    return deduped
 
 
 def _discover_from_feed_xml(
@@ -504,6 +545,7 @@ def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = No
     for source in active_sources:
         source_stats = _new_source_stats(source)
         source_now = now_utc or datetime.datetime.utcnow()
+        listing_timeout = _listing_timeout_for_source(source.source_url)
 
         quarantine_until = getattr(source, "quarantine_until", None)
         if quarantine_until is not None and quarantine_until > source_now:
@@ -560,7 +602,7 @@ def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = No
                 source.source_url,
                 source_name=source.company_name,
                 stage="feed_fetch",
-                timeout=settings.release_listing_fetch_timeout_seconds,
+                timeout=listing_timeout,
             )
             source.last_listing_checked_at = source_now
             if not feed_text:
@@ -630,12 +672,26 @@ def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = No
             continue
 
         run_pages_total += 1
-        listing_html, listing_meta = _fetch_html(
-            source.source_url,
-            source_name=source.company_name,
-            stage="listing_fetch",
-            timeout=settings.release_listing_fetch_timeout_seconds,
-        )
+        listing_html = None
+        listing_meta: dict = {
+            "ok": False,
+            "error_kind": "request_error",
+            "status_code": None,
+            "duration_ms": 0,
+            "retries_used": 0,
+        }
+        listing_url_used = source.source_url
+        for idx, listing_candidate_url in enumerate(_listing_url_candidates(source.source_url)):
+            listing_html, listing_meta = _fetch_html(
+                listing_candidate_url,
+                source_name=source.company_name,
+                stage="listing_fetch" if idx == 0 else "listing_fetch_fallback",
+                timeout=listing_timeout,
+            )
+            if listing_html:
+                listing_url_used = listing_candidate_url
+                break
+
         source.last_listing_checked_at = source_now
         source.last_listing_etag = None
         source.last_listing_modified = None
@@ -668,12 +724,12 @@ def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = No
         run_pages_success += 1
 
         # Dynamic AEM list/news-feed components often publish content via model.json endpoints.
-        for aux_url in _extract_embedded_model_urls(listing_html, source.source_url)[:2]:
+        for aux_url in _extract_embedded_model_urls(listing_html, listing_url_used)[:2]:
             aux_html, _ = _fetch_html(
                 aux_url,
                 source_name=source.company_name,
                 stage="listing_aux_fetch",
-                timeout=settings.release_listing_fetch_timeout_seconds,
+                timeout=listing_timeout,
                 max_retries=1,
             )
             if aux_html:

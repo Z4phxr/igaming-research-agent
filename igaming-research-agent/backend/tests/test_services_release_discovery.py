@@ -185,6 +185,72 @@ def test_discover_recent_releases_applies_local_rate_limit(monkeypatch):
         db.close()
 
 
+def test_discover_recent_releases_wynn_listing_fallback_url_on_timeout(monkeypatch):
+        db = _build_session()
+        try:
+                db.add(
+                        ReleaseSource(
+                                company_name="WynnBET",
+                                category="Operator",
+                                source_url="https://investors.wynnresorts.com/press-releases",
+                                notes="",
+                                is_active=True,
+                                crawl_delay_seconds=0,
+                                max_requests_per_hour=100,
+                        )
+                )
+                db.commit()
+
+                calls: list[str] = []
+                fallback_listing_html = """
+                <table class='table'>
+                    <tbody>
+                        <tr>
+                            <td><time>03/29/26</time></td>
+                            <td>
+                                <a class='more-item' href='/news-releases/news-release-details/wynn-resorts-issues-update-wynn-al-marjan-island'>
+                                    <span class='more-item__text'>Wynn Resorts Issues Update on Wynn Al Marjan Island</span>
+                                </a>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                """
+
+                def fake_get(url, *args, **kwargs):
+                        calls.append(url)
+                        if url == "https://investors.wynnresorts.com/press-releases":
+                                raise requests.Timeout("primary timeout")
+                        if url in {
+                                "https://investors.wynnresorts.com/news-releases",
+                                "https://investors.wynnresorts.com/news-releases/",
+                        }:
+                                return _FakeResponse(200, fallback_listing_html)
+                        return _FakeResponse(404, "not found")
+
+                monkeypatch.setattr(release_discovery.requests, "get", fake_get)
+                monkeypatch.setattr(release_discovery.time, "sleep", lambda _: None)
+                monkeypatch.setattr(release_discovery.settings, "release_fetch_max_retries", 0)
+                monkeypatch.setattr(release_discovery.settings, "release_max_links_per_source", 5)
+                monkeypatch.setattr(release_discovery.settings, "release_max_fetches_per_source", 5)
+                monkeypatch.setattr(release_discovery.settings, "release_request_jitter_seconds", 0)
+
+                now = datetime.datetime(2026, 3, 30, 12, 0, 0)
+                result = release_discovery.discover_recent_releases(db, now_utc=now)
+
+                assert len(result) == 1
+                assert result[0]["url"] == (
+                        "https://investors.wynnresorts.com/news-releases/news-release-details/"
+                        "wynn-resorts-issues-update-wynn-al-marjan-island"
+                )
+                assert result[0]["title"] == "Wynn Resorts Issues Update on Wynn Al Marjan Island"
+                assert result[0]["published_date"] == datetime.datetime(2026, 3, 29)
+                assert "https://investors.wynnresorts.com/press-releases" in calls
+                assert "https://investors.wynnresorts.com/news-releases" in calls or "https://investors.wynnresorts.com/news-releases/" in calls
+        finally:
+                db.close()
+
+
 def test_discover_recent_releases_kalshi_dedicated_parser_accepts_in_window(monkeypatch):
     db = _build_session()
     try:

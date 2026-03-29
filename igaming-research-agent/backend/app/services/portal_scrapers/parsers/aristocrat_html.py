@@ -27,7 +27,7 @@ class AristocratHtmlParser(PortalListingParser):
     ) -> ListingParseResult:
         result = ListingParseResult()
         soup = BeautifulSoup(listing_html or "", "html.parser")
-        articles = soup.select("article")
+        articles = soup.select("main article, article.anim-fade-in-up, article")
 
         if not articles:
             result.empty_reason = "no_aristocrat_articles"
@@ -35,10 +35,20 @@ class AristocratHtmlParser(PortalListingParser):
 
         seen: set[str] = set()
         for index, article in enumerate(articles):
-            link = article.select_one("a[href]")
+            link = article.select_one(".entry-title a[href], h2.entry-title a[href], h3.entry-title a[href]")
+            if link is None:
+                # Fallback: pick the first non-empty text link (skip image-only anchors).
+                for candidate in article.select("a[href]"):
+                    candidate_text = re.sub(r"\s+", " ", candidate.get_text(" ", strip=True)).strip()
+                    if candidate_text:
+                        link = candidate
+                        break
             if link is None:
                 continue
+
             href = str(link.get("href") or "").strip()
+            if not href:
+                continue
             absolute_url = urljoin(source_url, href)
             if "/news/" in absolute_url.rstrip("/").lower() and absolute_url.rstrip("/").lower().endswith("/news"):
                 continue
@@ -75,11 +85,29 @@ class AristocratHtmlParser(PortalListingParser):
 
     @staticmethod
     def _extract_date(article) -> datetime.datetime | None:
+        time_node = article.select_one("time[datetime]")
+        if time_node is not None:
+            raw_dt = str(time_node.get("datetime") or "").strip()
+            if raw_dt:
+                candidates = [raw_dt]
+                if raw_dt.endswith("Z"):
+                    candidates.append(raw_dt[:-1] + "+00:00")
+                for candidate in candidates:
+                    try:
+                        parsed = datetime.datetime.fromisoformat(candidate)
+                        if parsed.tzinfo is not None:
+                            return parsed.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+                        return parsed
+                    except ValueError:
+                        continue
+
         text = re.sub(r"\s+", " ", article.get_text(" ", strip=True)).strip()
-        match = re.search(r"\b([A-Z][a-z]{2}\s+\d{1,2},\s+\d{4})\b", text)
+        match = re.search(r"\b([A-Z][a-z]{2,8}\s+\d{1,2},\s+\d{4})\b", text)
         if not match:
             return None
-        try:
-            return datetime.datetime.strptime(match.group(1), "%b %d, %Y")
-        except ValueError:
-            return None
+        for fmt in ("%b %d, %Y", "%B %d, %Y"):
+            try:
+                return datetime.datetime.strptime(match.group(1), fmt)
+            except ValueError:
+                continue
+        return None

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import datetime
+import html
+import json
 import re
 from urllib.parse import urljoin, urlparse
 
@@ -29,6 +31,17 @@ class GdcGroupHtmlParser(PortalListingParser):
         result = ListingParseResult()
         soup = BeautifulSoup(html, "html.parser")
         links = soup.select("a[href*='/media-center/'][href]")
+
+        payload_items = self._extract_articles_payload(soup, html)
+        if payload_items:
+            self._append_payload_candidates(
+                result=result,
+                items=payload_items,
+                source_url=source_url,
+                cutoff=cutoff,
+                now_utc=now_utc,
+            )
+            return result
 
         if not links:
             if self._is_bot_blocked(html):
@@ -88,6 +101,77 @@ class GdcGroupHtmlParser(PortalListingParser):
             return None
 
     @staticmethod
+    def _extract_articles_payload(soup: BeautifulSoup, raw_html: str) -> list[dict]:
+        component = soup.find("news-articles-component")
+        payload = ""
+        if component is not None:
+            payload = str(component.get(":articles") or "").strip()
+            if not payload:
+                payload = str(component.get("articles") or "").strip()
+
+        if not payload:
+            match = re.search(r"<news-articles-component[^>]+:articles=\"([^\"]+)\"", raw_html or "", re.IGNORECASE)
+            if match:
+                payload = match.group(1).strip()
+
+        if not payload:
+            return []
+
+        decoded_payload = html.unescape(payload)
+        try:
+            parsed = json.loads(decoded_payload)
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+        if isinstance(parsed, list):
+            return [item for item in parsed if isinstance(item, dict)]
+        return []
+
+    def _append_payload_candidates(
+        self,
+        result: ListingParseResult,
+        items: list[dict],
+        source_url: str,
+        cutoff: datetime.datetime | None,
+        now_utc: datetime.datetime | None,
+    ) -> None:
+        for index, item in enumerate(items):
+            href = str(item.get("article_url") or "").strip()
+            if not href:
+                continue
+            absolute_url = urljoin(source_url, href)
+
+            title = re.sub(r"\s+", " ", str(item.get("page_title") or "")).strip()
+            if len(title) < 8:
+                continue
+
+            published = self._parse_date(str(item.get("publish_date") or ""))
+            if published is not None and cutoff is not None and published < cutoff:
+                if index == 0:
+                    result.empty_reason = "listing_first_gdcgroup_item_outside_time_window"
+                    return
+                break
+            if published is not None and now_utc is not None and published > now_utc:
+                continue
+
+            result.candidate_urls.append(absolute_url)
+            result.candidate_titles[absolute_url] = title
+            if published is not None:
+                result.candidate_published_dates[absolute_url] = published
+
+        if not result.candidate_urls:
+            result.empty_reason = "no_gdcgroup_release_links"
+
+    @staticmethod
     def _is_bot_blocked(html: str) -> bool:
         lower = (html or "").lower()
-        return "cloudflare" in lower or "captcha" in lower or "bot" in lower or "access denied" in lower
+        signals = [
+            "cf-chl-",
+            "cf-browser-verification",
+            "challenge-platform",
+            "attention required",
+            "please enable cookies",
+            "captcha",
+            "access denied",
+        ]
+        return any(signal in lower for signal in signals)

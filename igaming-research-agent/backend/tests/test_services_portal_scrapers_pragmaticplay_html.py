@@ -25,3 +25,31 @@ def test_pragmaticplay_parser_extracts_news_links_and_dates():
     assert result.empty_reason is None
     assert len(result.candidate_urls) == 2
     assert result.candidate_published_dates[result.candidate_urls[0]] == datetime.datetime(2026, 3, 24)
+
+
+def test_pragmaticplay_parser_extracts_onclick_href_cards_without_anchor_href():
+    parser = PragmaticPlayHtmlParser()
+    listing_html = """
+    <div class="news">
+      <div class="news__box-white" onclick="hrefTo('https://www.pragmaticplay.com/en/news/pragmatic-plays-smart-studio-goes-live-with-cactus-gaming/')">
+        <h3 class="news__title heading">PRAGMATIC PLAY'S SMART STUDIO GOES LIVE WITH CACTUS GAMING</h3>
+        <p class="news__date">24th Mar 2026</p>
+      </div>
+    </div>
+    """
+
+    result = parser.parse_listing(
+        listing_html=listing_html,
+        source_url="https://www.pragmaticplay.com/en/news#",
+        company_name="Pragmatic Play",
+    )
+
+    assert result.empty_reason is None
+    assert result.candidate_urls == [
+        "https://www.pragmaticplay.com/en/news/pragmatic-plays-smart-studio-goes-live-with-cactus-gaming/"
+    ]
+    assert (
+        result.candidate_titles[result.candidate_urls[0]]
+        == "PRAGMATIC PLAY'S SMART STUDIO GOES LIVE WITH CACTUS GAMING"
+    )
+    assert result.candidate_published_dates[result.candidate_urls[0]] == datetime.datetime(2026, 3, 24)
