@@ -6,18 +6,22 @@ from app.services.portal_scrapers.parsers.penn_html import PennHtmlParser
 def test_penn_parser_extracts_links_titles_and_dates():
     parser = PennHtmlParser()
     listing_html = """
-    <div class='news-item'>
-      March 19, 2026
-      <a href='/news-releases/news-release-details/penn-entertainment-sets-june-24-grand-opening-date-new-hollywood'>
-        PENN Entertainment Sets June 24 as Grand Opening Date for New Hollywood Casino Aurora in Illinois
-      </a>
-    </div>
-    <div class='news-item'>
-      March 12, 2026
-      <a href='/news-releases/news-release-details/penn-entertainment-sets-june-12-grand-opening-date-new-hotel'>
-        PENN Entertainment Sets June 12 as Grand Opening Date for New Hotel at Hollywood Casino Columbus
-      </a>
-    </div>
+    <article class="clearfix node node--nir-news--nir-widget-list node--type-nir-news node--view-mode-nir-widget-list node--promoted">
+      <div class="nir-widget--field nir-widget--news--date-time">March 19, 2026</div>
+      <div class="nir-widget--field nir-widget--news--headline">
+        <a href="/news-releases/news-release-details/penn-entertainment-sets-june-24-grand-opening-date-new-hollywood" hreflang="en">
+          PENN Entertainment Sets June 24 as Grand Opening Date for New Hollywood Casino Aurora in Illinois
+        </a>
+      </div>
+    </article>
+    <article class="clearfix node node--nir-news--nir-widget-list node--type-nir-news node--view-mode-nir-widget-list node--promoted">
+      <div class="nir-widget--field nir-widget--news--date-time">March 12, 2026</div>
+      <div class="nir-widget--field nir-widget--news--headline">
+        <a href="/news-releases/news-release-details/penn-entertainment-sets-june-12-grand-opening-date-new-hotel" hreflang="en">
+          PENN Entertainment Sets June 12 as Grand Opening Date for New Hotel at Hollywood Casino Columbus
+        </a>
+      </div>
+    </article>
     """
 
     result = parser.parse_listing(

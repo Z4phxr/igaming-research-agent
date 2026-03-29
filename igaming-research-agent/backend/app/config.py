@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
 
     release_recent_window_hours: int = 72
-    release_listing_fetch_timeout_seconds: int = 20
+    release_listing_fetch_timeout_seconds: int = 90
     release_fetch_timeout_seconds: int = 15
     release_fetch_max_retries: int = 2
     release_fetch_backoff_seconds: float = 1.0

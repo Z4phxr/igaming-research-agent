@@ -37,14 +37,25 @@ class PennHtmlParser(PortalListingParser):
         result = ListingParseResult()
         soup = BeautifulSoup(listing_html or "", "html.parser")
 
-        links = soup.select("a[href*='/news-releases/news-release-details/']")
-        if not links:
-            result.empty_reason = "no_penn_release_links"
+        # Find all article elements from NIR widget structure
+        articles = soup.select("article[class*='nir-news']")
+        if not articles:
+            result.empty_reason = "no_penn_articles_found"
             return result
 
         seen: set[str] = set()
-        for index, link in enumerate(links):
-            href = str(link.get("href") or "").strip()
+        for index, article in enumerate(articles):
+            # Extract date from dedicated date div
+            date_div = article.select_one("div.nir-widget--news--date-time")
+            date_text = re.sub(r"\s+", " ", date_div.get_text(" ", strip=True)).strip() if date_div else None
+            published = self._parse_date_from_text(date_text) if date_text else None
+
+            # Extract link from headline div
+            headline_div = article.select_one("div.nir-widget--news--headline a")
+            if not headline_div:
+                continue
+
+            href = str(headline_div.get("href") or "").strip()
             if not href:
                 continue
 
@@ -52,11 +63,11 @@ class PennHtmlParser(PortalListingParser):
             if absolute_url in seen:
                 continue
 
-            title = re.sub(r"\s+", " ", link.get_text(" ", strip=True)).strip()
+            title = re.sub(r"\s+", " ", headline_div.get_text(" ", strip=True)).strip()
             if not title:
                 continue
 
-            published = self._extract_nearby_date(link)
+            # Apply cutoff filtering
             if published is not None and cutoff is not None and published < cutoff:
                 if index == 0:
                     result.empty_reason = "listing_first_penn_item_outside_time_window"
@@ -80,14 +91,6 @@ class PennHtmlParser(PortalListingParser):
     def is_likely_descending_chronological(self) -> bool:
         return True
 
-    def _extract_nearby_date(self, link: Tag) -> datetime.datetime | None:
-        parent_text = re.sub(r"\s+", " ", link.parent.get_text(" ", strip=True) if link.parent else "").strip()
-        for candidate in (parent_text, self._window_text(link)):
-            parsed = self._parse_date_from_text(candidate)
-            if parsed is not None:
-                return parsed
-        return None
-
     @classmethod
     def _parse_date_from_text(cls, text: str) -> datetime.datetime | None:
         value = (text or "").strip()
@@ -104,14 +107,3 @@ class PennHtmlParser(PortalListingParser):
                 except ValueError:
                     continue
         return None
-
-    @staticmethod
-    def _window_text(link: Tag) -> str:
-        snippets: list[str] = []
-        prev = link.previous_sibling
-        nxt = link.next_sibling
-        if isinstance(prev, str):
-            snippets.append(prev)
-        if isinstance(nxt, str):
-            snippets.append(nxt)
-        return re.sub(r"\s+", " ", " ".join(snippets)).strip()

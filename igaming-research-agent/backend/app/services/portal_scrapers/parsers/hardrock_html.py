@@ -33,64 +33,54 @@ class HardRockHtmlParser(PortalListingParser):
     ) -> ListingParseResult:
         result = ListingParseResult()
         soup = BeautifulSoup(listing_html or "", "html.parser")
-        cards = soup.select(".cfcards.news-cf")
-
-        if not cards:
-            cards = soup.select("a[href^='/blog/']")
-
+        
+        # Look for article cards in the AEM Grid structure
+        cards = soup.select("div.cfcards.news-cf.cmp-button--primary")
+        
         if not cards:
             result.empty_reason = "no_hardrock_news_cards"
             return result
 
         seen: set[str] = set()
 
-        if cards and hasattr(cards[0], "select") and cards[0].name != "a":
-            for index, card in enumerate(cards):
-                link = card.select_one("a[href^='/blog/']")
-                if link is None:
-                    continue
-                href = str(link.get("href") or "").strip()
-                absolute_url = urljoin(source_url, href)
-                if self._is_excluded(absolute_url):
-                    continue
-                if absolute_url in seen:
-                    continue
+        for index, card in enumerate(cards):
+            # Extract title link from .cmp-teaser__title
+            title_link = card.select_one("a.cmp-teaser__title")
+            if title_link is None:
+                continue
+                
+            href = str(title_link.get("href") or "").strip()
+            if not href:
+                continue
+                
+            absolute_url = urljoin(source_url, href)
+            if self._is_excluded(absolute_url):
+                continue
+            if absolute_url in seen:
+                continue
 
-                title = ""
-                title_node = card.select_one("h2, h3, h4")
-                if title_node is not None:
-                    title = re.sub(r"\s+", " ", title_node.get_text(" ", strip=True)).strip()
+            title = re.sub(r"\s+", " ", title_link.get_text(" ", strip=True)).strip()
+            if not title:
+                continue
 
-                published = self._extract_listing_date(card)
-                if published is not None and cutoff is not None and published < cutoff:
-                    if index == 0:
-                        result.empty_reason = "listing_first_hardrock_item_outside_time_window"
-                        return result
-                    break
+            # Extract date from .cmp-teaser__date
+            date_elem = card.select_one("h3.cmp-teaser__date")
+            published = self._parse_date_from_element(date_elem) if date_elem else None
+            
+            if published is not None and cutoff is not None and published < cutoff:
+                if index == 0:
+                    result.empty_reason = "listing_first_hardrock_item_outside_time_window"
+                    return result
+                break
 
-                if published is not None and now_utc is not None and published > now_utc:
-                    continue
+            if published is not None and now_utc is not None and published > now_utc:
+                continue
 
-                seen.add(absolute_url)
-                result.candidate_urls.append(absolute_url)
-                if title:
-                    result.candidate_titles[absolute_url] = title
-                if published is not None:
-                    result.candidate_published_dates[absolute_url] = published
-        else:
-            for link in cards:
-                href = str(link.get("href") or "").strip()
-                absolute_url = urljoin(source_url, href)
-                if self._is_excluded(absolute_url):
-                    continue
-                if absolute_url in seen:
-                    continue
-
-                seen.add(absolute_url)
-                result.candidate_urls.append(absolute_url)
-                title = re.sub(r"\s+", " ", link.get_text(" ", strip=True)).strip()
-                if title and title.lower() != "read more":
-                    result.candidate_titles[absolute_url] = title
+            seen.add(absolute_url)
+            result.candidate_urls.append(absolute_url)
+            result.candidate_titles[absolute_url] = title
+            if published is not None:
+                result.candidate_published_dates[absolute_url] = published
 
         if not result.candidate_urls:
             result.empty_reason = "no_hardrock_article_links"
@@ -107,8 +97,11 @@ class HardRockHtmlParser(PortalListingParser):
         return any(marker in normalized for marker in self._EXCLUDED_PATH_MARKERS)
 
     @staticmethod
-    def _extract_listing_date(card: BeautifulSoup) -> datetime.datetime | None:
-        text = re.sub(r"\s+", " ", card.get_text(" ", strip=True)).strip()
+    def _parse_date_from_element(date_elem) -> datetime.datetime | None:
+        """Extract date from h3.cmp-teaser__date element (format: 'Month DD, YYYY')."""
+        text = re.sub(r"\s+", " ", date_elem.get_text(" ", strip=True)).strip() if date_elem else None
+        if not text:
+            return None
         match = re.search(r"\b([A-Z][a-z]+\s+\d{1,2},\s+\d{4})\b", text)
         if not match:
             return None
