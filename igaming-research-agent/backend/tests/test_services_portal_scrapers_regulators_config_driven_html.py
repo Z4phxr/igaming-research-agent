@@ -95,16 +95,32 @@ def test_sba_config_filters_nav_links_and_keeps_latest_story_links():
     assert parser is not None
 
     html = """
+    <div class="et_pb_text_inner"><h2>THE LATEST</h2></div>
+    <div class="post_types post_types_0">
+      <div class="post-types-container slider">
+        <div class="lwp_post_carousel_item">
+          <h4 class="lwp_post_carousel_heading">
+            <a class="lwp_post_title" href="https://sportsbettingalliance.org/fanduel-introduces-play-with-a-plan-a-research-based-approach-to-responsible-gaming/">
+              FanDuel Introduces "Play with a Plan"
+            </a>
+          </h4>
+          <p class="lwp_post_carousel_meta"><span class="lwp_meta_date">Jan 22, 2026</span></p>
+        </div>
+        <div class="lwp_post_carousel_item">
+          <h4 class="lwp_post_carousel_heading">
+            <a class="lwp_post_title" href="https://sportsbettingalliance.org/draftkings-adds-another-brick-in-its-rg-wall-with-evive-integration/">
+              DraftKings adds another brick in its RG wall with Evive integration
+            </a>
+          </h4>
+          <p class="lwp_post_carousel_meta"><span class="lwp_meta_date">Oct 3, 2025</span></p>
+        </div>
+      </div>
+    </div>
     <nav>
-      <h4><a href="https://sportsbettingalliance.org/about/">About</a></h4>
+      <a href="https://sportsbettingalliance.org/about/">About</a>
+      <a href="https://sportsbettingalliance.org/privacy-policy/">Privacy Policy</a>
+      <a href="https://sportsbettingalliance.org/random-unscoped-link/">Random Unscoped Link</a>
     </nav>
-    <section>
-      <h4>
-        <a href="https://sportsbettingalliance.org/fanduel-donates-200000-to-north-carolina-food-banks-to-support-hunger-relief/">
-          FanDuel Donates
-        </a>
-      </h4>
-    </section>
     """
 
     result = parser.parse_listing(
@@ -114,8 +130,10 @@ def test_sba_config_filters_nav_links_and_keeps_latest_story_links():
     )
 
     assert result.candidate_urls == [
-        "https://sportsbettingalliance.org/fanduel-donates-200000-to-north-carolina-food-banks-to-support-hunger-relief/"
+        "https://sportsbettingalliance.org/fanduel-introduces-play-with-a-plan-a-research-based-approach-to-responsible-gaming/",
+        "https://sportsbettingalliance.org/draftkings-adds-another-brick-in-its-rg-wall-with-evive-integration/",
     ]
+    assert result.candidate_published_dates[result.candidate_urls[0]] == datetime.datetime(2026, 1, 22)
 
 
 def test_wv_config_sets_blocked_reason_for_forbidden_page():

@@ -155,7 +155,11 @@ _CONFIG_DRIVEN_CONFIGS: list[HtmlListingParserConfig] = [
         name="sports-betting-alliance",
         source_url_contains=("sportsbettingalliance.org/about",),
         company_name_contains=("sports betting alliance",),
-        item_selector="h4 a[href*='sportsbettingalliance.org/']",
+        scope_selector="div.post_types.post_types_0",
+        item_selector="div.lwp_post_carousel_item",
+        link_selector="a.lwp_post_title[href]",
+        date_selector="span.lwp_meta_date",
+        date_formats=("%b %d, %Y",),
         link_href_must_contain=("sportsbettingalliance.org",),
         link_href_excludes=(
             "/about/",

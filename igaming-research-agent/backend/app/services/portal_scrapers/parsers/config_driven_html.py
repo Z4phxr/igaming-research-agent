@@ -156,9 +156,9 @@ def _parse_date(raw: str, formats: tuple[str, ...]) -> datetime.datetime | None:
         return None
     normalized = re.sub(r"\s+", "", value)
     for fmt in formats:
-        candidate = normalized if "%" in fmt and ("%d" in fmt or "%m" in fmt) else value
-        try:
-            return datetime.datetime.strptime(candidate, fmt)
-        except ValueError:
-            continue
+        for candidate in (value, normalized):
+            try:
+                return datetime.datetime.strptime(candidate, fmt)
+            except ValueError:
+                continue
     return None
