@@ -29,7 +29,7 @@ DEFAULT_RELEASE_SOURCES: list[dict[str, str]] = [
     },
     {
         "company_name": "DraftKings",
-        "source_url": "https://responsiblegambling.org/about-rgc/rgc-news/",
+        "category": "Operator",
         "source_url": "https://www.draftkings.com/news-about",
         "notes": "Zaklady + kasyno + DFS, notowany na NASDAQ (DKNG)",
     },
@@ -573,14 +573,21 @@ def apply_release_source_data_migration() -> None:
         # Build a canonical, de-duplicated defaults map (last value wins for same URL).
         defaults_by_canonical: dict[str, dict[str, str]] = {}
         for source in DEFAULT_RELEASE_SOURCES:
-            canonical = _canonical_release_source_url(source["source_url"])
+            source_url = str(source.get("source_url") or "")
+            company_name = str(source.get("company_name") or "").strip()
+            category = str(source.get("category") or "").strip()
+            notes = str(source.get("notes") or "")
+            if not source_url or not company_name or not category:
+                continue
+
+            canonical = _canonical_release_source_url(source_url)
             if not canonical:
                 continue
             defaults_by_canonical[canonical] = {
-                "company_name": source["company_name"],
-                "category": source["category"],
+                "company_name": company_name,
+                "category": category,
                 "source_url": canonical,
-                "notes": source["notes"],
+                "notes": notes,
             }
 
         for canonical, source in defaults_by_canonical.items():
