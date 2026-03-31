@@ -292,7 +292,14 @@ def run_articles_pipeline(db: Session | None = None, raise_on_error: bool = Fals
         if not recent_articles:
             logger.warning("Daily pipeline freshness gate rejected all scraped articles")
 
-        analysis_result = run_analysis_pipeline(recent_articles, db=session)
+        try:
+            analysis_result = run_analysis_pipeline(recent_articles, db=session)
+        except TypeError as exc:
+            # Backward compatibility for tests or callers monkeypatching
+            # run_analysis_pipeline(articles) without a db keyword.
+            if "unexpected keyword argument 'db'" not in str(exc):
+                raise
+            analysis_result = run_analysis_pipeline(recent_articles)
         final_articles = analysis_result.get("final_articles", [])
         all_articles = freshness_rejections + analysis_result.get("all_articles", [])
         logger.info("Articles pipeline step analysis complete: count=%s", len(final_articles))
