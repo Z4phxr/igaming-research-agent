@@ -30,4 +30,29 @@ describe('ArticleCard', () => {
     expect(screen.getByText('regulation')).toBeInTheDocument();
     expect(screen.getByText('licensing')).toBeInTheDocument();
   });
+
+  it('renders freshness rejection label without low-score fallback', () => {
+    render(
+      <ArticleCard
+        rejected
+        article={{
+          id: 2,
+          title: 'Date parsing edge case',
+          url: 'https://example.com/date-edge',
+          summary: 'Summary',
+          score: 0,
+          kept: false,
+          rejection_reason: 'invalid_published_date',
+          passed_relevance_filter: false,
+          tags: '',
+          source_domain: 'example.com',
+          published_date: null,
+          scraped_date: new Date().toISOString(),
+        }}
+      />,
+    );
+
+    expect(screen.getByText('Rejected: invalid_published_date')).toBeInTheDocument();
+    expect(screen.queryByText('Rejected: low score (0/10)')).not.toBeInTheDocument();
+  });
 });

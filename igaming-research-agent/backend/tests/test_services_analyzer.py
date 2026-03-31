@@ -142,6 +142,20 @@ def test_build_rejection_metadata_for_scoring_threshold():
     assert metadata["rejection_llm_why"] is None
 
 
+def test_build_rejection_metadata_for_invalid_published_date_alias():
+    metadata = analyzer.build_rejection_metadata(
+        {
+            "rejection_reason": "invalid_published_date",
+            "score": 0,
+            "raw_score": 0,
+        }
+    )
+
+    assert metadata["rejection_stage"] == "freshness"
+    assert "published date" in metadata["rejection_detail"].lower()
+    assert metadata["rejection_score"] is None
+
+
 def test_build_rejection_metadata_calls_llm_only_when_enabled(monkeypatch):
     calls = {"count": 0}
 

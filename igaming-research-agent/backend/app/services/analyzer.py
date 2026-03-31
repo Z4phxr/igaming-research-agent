@@ -342,7 +342,7 @@ def _base_rejection_metadata(article: dict) -> dict:
             "rejection_detail": "Rejected in scoring stage: scoring failed before a valid numeric score was produced.",
         }
 
-    if reason == "Rejected: fail to check the date":
+    if reason in {"Rejected: fail to check the date", "invalid_published_date", "missing_published_date"}:
         return {
             "rejection_stage": "freshness",
             "rejection_score": None,

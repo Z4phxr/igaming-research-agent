@@ -22,11 +22,24 @@ export default function ArticleCard({ article, rejected = false, showAllInfo = f
     .map((tag) => tag.trim())
     .filter(Boolean);
 
-  const rejectionLabel = article.rejection_reason === 'failed_relevance_filter'
+  const reason = article.rejection_reason ?? '';
+  const freshnessReasons = new Set([
+    'Rejected: fail to check the date',
+    'invalid_published_date',
+    'missing_published_date',
+    'stale_published_date',
+    'future_published_date',
+  ]);
+
+  const rejectionLabel = reason === 'failed_relevance_filter'
     ? 'Rejected: failed relevance filter'
-    : article.rejection_reason === 'Rejected: fail to check the date'
-      ? 'Rejected: fail to check the date'
-      : `Rejected: low score (${score}/10)`;
+    : reason === 'score_below_threshold'
+      ? `Rejected: low score (${score}/10)`
+      : freshnessReasons.has(reason)
+        ? 'Rejected: invalid_published_date'
+        : reason
+          ? `Rejected: ${reason}`
+          : 'Rejected';
 
   const submitHelpful = async (): Promise<void> => {
     setFeedbackError('');
