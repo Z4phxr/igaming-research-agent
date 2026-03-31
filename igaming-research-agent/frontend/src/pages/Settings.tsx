@@ -11,10 +11,8 @@ import {
   getReleaseSources,
   getQueries,
   publishPrompt,
-  runArticlesPipeline,
   runReleaseSourceHealthCheck,
   runSingleReleaseSourceHealthCheck,
-  runReleasesPipeline,
   updatePromptDraft,
   updateReleaseSource,
   updateQuery,
@@ -41,12 +39,8 @@ export default function Settings() {
   const [showAllInfo, setShowAllInfo] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [runningArticlesPipeline, setRunningArticlesPipeline] = useState(false);
-  const [runningReleasesPipeline, setRunningReleasesPipeline] = useState(false);
   const [runningHealthCheck, setRunningHealthCheck] = useState(false);
   const [runningSingleHealthCheckId, setRunningSingleHealthCheckId] = useState<number | null>(null);
-  const [articlesPipelineMessage, setArticlesPipelineMessage] = useState('');
-  const [releasesPipelineMessage, setReleasesPipelineMessage] = useState('');
   const [healthError, setHealthError] = useState('');
   const [healthSummary, setHealthSummary] = useState<ReleaseSourceHealthCheckResponse | null>(null);
   const [healthResults, setHealthResults] = useState<ReleaseSourceHealthCheckResult[]>([]);
@@ -251,36 +245,6 @@ export default function Settings() {
     if (type === 'legislative') return 'bg-[#1e3a5f] text-[#60a5fa]';
     if (type === 'business') return 'bg-[#1e1b4b] text-[#818cf8]';
     return 'bg-[#14532d] text-[#4ade80]';
-  };
-
-  const handleRunArticlesPipeline = async () => {
-    setRunningArticlesPipeline(true);
-    setArticlesPipelineMessage('');
-    setError('');
-    try {
-      const result = await runArticlesPipeline();
-      setArticlesPipelineMessage(result.message);
-      await loadQueries();
-    } catch (pipelineError) {
-      setError(pipelineError instanceof Error ? pipelineError.message : 'Unable to run pipeline');
-    } finally {
-      setRunningArticlesPipeline(false);
-    }
-  };
-
-  const handleRunReleasesPipeline = async () => {
-    setRunningReleasesPipeline(true);
-    setReleasesPipelineMessage('');
-    setError('');
-    try {
-      const result = await runReleasesPipeline();
-      setReleasesPipelineMessage(result.message);
-      await loadReleaseSources();
-    } catch (pipelineError) {
-      setError(pipelineError instanceof Error ? pipelineError.message : 'Unable to run release pipeline');
-    } finally {
-      setRunningReleasesPipeline(false);
-    }
   };
 
   const handleRunHealthCheck = async () => {
@@ -565,22 +529,10 @@ export default function Settings() {
   );
 
   const renderQueriesView = () => (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h3 className="text-2xl font-semibold text-white">Query Manager</h3>
-        <button
-          type="button"
-          onClick={() => void handleRunArticlesPipeline()}
-          disabled={runningArticlesPipeline}
-          className="rounded-md bg-[#2563eb] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#1d4ed8] disabled:opacity-50"
-        >
-          {runningArticlesPipeline ? 'Running articles...' : 'Run Articles Pipeline'}
-        </button>
-      </div>
+    <div className="w-full max-w-6xl space-y-5">
+      <h3 className="text-center text-2xl font-semibold text-white">Query Manager</h3>
 
-      {articlesPipelineMessage && <p className="text-sm text-[#16a34a]">{articlesPipelineMessage}</p>}
-
-      <form onSubmit={submit} className="w-full max-w-3xl space-y-4 rounded-lg border border-[#222222] bg-[#111111] p-5">
+      <form onSubmit={submit} className="mx-auto w-full max-w-3xl space-y-4 rounded-lg border border-[#222222] bg-[#111111] p-5">
         <div>
           <label htmlFor="searchTerm" className="mb-1 block text-[12px] uppercase tracking-[0.05em] text-[#888888]">Search query</label>
           <input
@@ -703,24 +655,12 @@ export default function Settings() {
   );
 
   const renderSourcesView = () => (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-2xl font-semibold text-white">Release Source Manager</h3>
-        <button
-          type="button"
-          onClick={() => void handleRunReleasesPipeline()}
-          disabled={runningReleasesPipeline}
-          className="rounded-md bg-[#16a34a] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#15803d] disabled:opacity-50"
-        >
-          {runningReleasesPipeline ? 'Running releases...' : 'Run Releases Pipeline'}
-        </button>
-      </div>
-
-      {releasesPipelineMessage && <p className="text-sm text-[#16a34a]">{releasesPipelineMessage}</p>}
+    <div className="w-full max-w-6xl space-y-4">
+      <h3 className="text-center text-2xl font-semibold text-white">Release Source Manager</h3>
 
       <form
         onSubmit={submitReleaseSource}
-        className="w-full max-w-3xl space-y-4 rounded-lg border border-[#222222] bg-[#111111] p-5"
+        className="mx-auto w-full max-w-3xl space-y-4 rounded-lg border border-[#222222] bg-[#111111] p-5"
       >
         <div>
           <label htmlFor="companyName" className="mb-1 block text-[12px] uppercase tracking-[0.05em] text-[#888888]">
@@ -879,9 +819,11 @@ export default function Settings() {
   );
 
   const renderHealthView = () => (
-    <div className="space-y-5">
-      <div className="rounded-lg border border-[#1f2937] bg-[#10141f] p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="w-full max-w-6xl space-y-5">
+      <h3 className="text-center text-2xl font-semibold text-white">Health Checks</h3>
+
+      <div className="mx-auto max-w-3xl rounded-lg border border-[#1f2937] bg-[#10141f] p-4">
+        <div className="flex flex-col items-center gap-3 text-center">
           <div>
             <p className="text-xs uppercase tracking-[0.08em] text-[#888888]">LLM Health Check</p>
             <p className="text-sm text-[#cbd5e1]">Validate API key and model availability before running Re-evaluate.</p>
@@ -912,8 +854,15 @@ export default function Settings() {
         )}
       </div>
 
-      <div className="flex items-center justify-between">
-        <h3 className="text-2xl font-semibold text-white">Health Checks</h3>
+      <div className="mx-auto max-w-3xl rounded-lg border border-[#4b5563] bg-[#0f172a] p-4 text-center">
+        <p className="text-xs uppercase tracking-[0.08em] text-[#888888] mb-2">Release Source Health Checks</p>
+        <p className="text-sm text-[#cbd5e1]">
+          Use these checks to validate each company source and quickly identify broken or stale feeds.
+        </p>
+      </div>
+
+      <div className="space-y-3 text-center">
+        <h4 className="text-lg font-semibold text-white">Run Source Checks</h4>
         <button
           type="button"
           onClick={() => void handleRunHealthCheck()}
@@ -922,13 +871,6 @@ export default function Settings() {
         >
           {runningHealthCheck ? 'Running health check...' : 'Run Health Check'}
         </button>
-      </div>
-
-      <div className="rounded-lg border border-[#4b5563] bg-[#0f172a] p-4">
-        <p className="text-xs uppercase tracking-[0.08em] text-[#888888] mb-2">Release Source Health Checks</p>
-        <p className="text-sm text-[#cbd5e1]">
-          Use these checks to validate each company source and quickly identify broken or stale feeds.
-        </p>
       </div>
 
       {healthSummary && (
@@ -961,23 +903,14 @@ export default function Settings() {
     const selectedTemplate = promptTemplates.find((item) => item.key === selectedPromptKey) || null;
 
     return (
-      <div className="space-y-5">
-        <div className="flex items-center justify-between">
-          <h3 className="text-2xl font-semibold text-white">Prompt Manager</h3>
-          <button
-            type="button"
-            onClick={() => void loadPromptTemplates()}
-            className="rounded-md bg-[#1f2937] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#374151]"
-          >
-            Refresh
-          </button>
-        </div>
+      <div className="w-full max-w-6xl space-y-5">
+        <h3 className="text-center text-2xl font-semibold text-white">Prompt Manager</h3>
 
-        {promptError && <p className="text-sm text-[#dc2626]">{promptError}</p>}
-        {promptMessage && <p className="text-sm text-[#16a34a]">{promptMessage}</p>}
+        {promptError && <p className="text-center text-sm text-[#dc2626]">{promptError}</p>}
+        {promptMessage && <p className="text-center text-sm text-[#16a34a]">{promptMessage}</p>}
 
-        <div className="grid gap-4 lg:grid-cols-[320px,1fr]">
-          <aside className="rounded-lg border border-[#222222] bg-[#111111] p-3">
+        <div className="grid w-full gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
+          <aside className="w-full rounded-lg border border-[#222222] bg-[#111111] p-3 xl:w-[340px]">
             <p className="mb-2 text-xs uppercase tracking-[0.08em] text-[#888888]">Available prompts</p>
             {loadingPrompts ? (
               <p className="text-sm text-[#b3b3b3]">Loading prompts...</p>
@@ -1005,7 +938,7 @@ export default function Settings() {
             )}
           </aside>
 
-          <div className="space-y-4 rounded-lg border border-[#222222] bg-[#111111] p-5">
+          <div className="min-w-0 space-y-4 rounded-lg border border-[#222222] bg-[#111111] p-5">
             {!selectedTemplate ? (
               <p className="text-sm text-[#b3b3b3]">Select a prompt from the left panel.</p>
             ) : (
@@ -1074,11 +1007,11 @@ export default function Settings() {
   };
 
   const renderPipelineSettingsView = () => (
-    <div className="space-y-5">
-      <h3 className="text-2xl font-semibold text-white">Pipeline Settings</h3>
+    <div className="w-full max-w-6xl space-y-5">
+      <h3 className="text-center text-2xl font-semibold text-white">Pipeline Settings</h3>
 
-      <div className="rounded-lg border border-[#4b3a0b] bg-[#17130a] p-4">
-        <div className="flex items-start justify-between gap-4">
+      <div className="mx-auto max-w-3xl rounded-lg border border-[#4b3a0b] bg-[#17130a] p-4">
+        <div className="flex flex-col items-center gap-4 text-center">
           <div>
             <p className="text-sm font-semibold text-[#fcd34d]">SHOW ALL INFO</p>
             <p className="mt-1 text-xs text-[#fef3c7]">
@@ -1104,7 +1037,7 @@ export default function Settings() {
         </div>
       </div>
 
-      <div className="rounded-lg border border-[#4b5563] bg-[#0f172a] p-4">
+      <div className="mx-auto max-w-3xl rounded-lg border border-[#4b5563] bg-[#0f172a] p-4 text-center">
         <p className="text-xs uppercase tracking-[0.08em] text-[#888888] mb-2">About scheduling</p>
         <p className="text-sm text-[#cbd5e1]">
           The pipeline automatically runs at the configured time every day in UTC timezone. Changes take effect after the application restarts.
@@ -1123,7 +1056,7 @@ export default function Settings() {
             e.preventDefault();
             void handleSavePipelineSettings();
           }}
-          className="w-full max-w-2xl space-y-4 rounded-lg border border-[#222222] bg-[#111111] p-5"
+          className="mx-auto w-full max-w-3xl space-y-4 rounded-lg border border-[#222222] bg-[#111111] p-5"
         >
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
@@ -1208,7 +1141,7 @@ export default function Settings() {
   );
 
   return (
-    <section className="space-y-5 flex flex-wrap justify-center gap-4">
+    <section className="mx-auto w-full max-w-6xl space-y-5">
       <div className="flex flex-wrap gap-2 rounded-lg border border-[#222222] bg-[#0f0f0f] p-2">
         <TabButton active={activeView === 'queries'} onClick={() => setActiveView('queries')}>
           Query Manager
