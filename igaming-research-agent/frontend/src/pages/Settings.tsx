@@ -5,24 +5,31 @@ import {
   createQuery,
   deleteReleaseSource,
   deleteQuery,
+  getPromptHistory,
+  getPromptTemplate,
+  getPromptTemplates,
   getReleaseSources,
   getQueries,
+  publishPrompt,
   runArticlesPipeline,
   runReleaseSourceHealthCheck,
   runSingleReleaseSourceHealthCheck,
   runReleasesPipeline,
+  updatePromptDraft,
   updateReleaseSource,
   updateQuery,
 } from '@/services/api';
 import type {
   CreateQueryDto,
+  PromptTemplate,
+  PromptTemplateVersion,
   Query,
   ReleaseSource,
   ReleaseSourceHealthCheckResponse,
   ReleaseSourceHealthCheckResult,
 } from '@/types';
 
-type SettingsView = 'queries' | 'sources' | 'health';
+type SettingsView = 'queries' | 'sources' | 'health' | 'prompts';
 
 export default function Settings() {
   const [activeView, setActiveView] = useState<SettingsView>('queries');
@@ -52,6 +59,15 @@ export default function Settings() {
   const [sourceUrl, setSourceUrl] = useState('');
   const [notes, setNotes] = useState('');
   const [savingSourceId, setSavingSourceId] = useState<number | null>(null);
+  const [promptTemplates, setPromptTemplates] = useState<PromptTemplate[]>([]);
+  const [selectedPromptKey, setSelectedPromptKey] = useState('');
+  const [promptDraft, setPromptDraft] = useState('');
+  const [promptHistory, setPromptHistory] = useState<PromptTemplateVersion[]>([]);
+  const [loadingPrompts, setLoadingPrompts] = useState(false);
+  const [savingPromptDraft, setSavingPromptDraft] = useState(false);
+  const [publishingPrompt, setPublishingPrompt] = useState(false);
+  const [promptError, setPromptError] = useState('');
+  const [promptMessage, setPromptMessage] = useState('');
 
   const readShowAllInfoSetting = (): boolean => {
     if (typeof window === 'undefined') {
@@ -102,12 +118,48 @@ export default function Settings() {
     }
   };
 
+  const loadPromptTemplates = async () => {
+    setLoadingPrompts(true);
+    try {
+      const templates = await getPromptTemplates();
+      setPromptTemplates(templates);
+      if (!selectedPromptKey && templates.length > 0) {
+        setSelectedPromptKey(templates[0].key);
+      }
+      setPromptError('');
+    } catch {
+      setPromptError('Unable to load prompt templates');
+    } finally {
+      setLoadingPrompts(false);
+    }
+  };
+
+  const loadPromptDetail = async (promptKey: string) => {
+    try {
+      const detail = await getPromptTemplate(promptKey);
+      setSelectedPromptKey(detail.key);
+      setPromptDraft(detail.draft_content);
+      setPromptHistory(detail.history || []);
+      setPromptError('');
+    } catch {
+      setPromptError('Unable to load prompt details');
+    }
+  };
+
   useEffect(() => {
     setShowAllInfo(readShowAllInfoSetting());
 
     void loadQueries();
     void loadReleaseSources();
+    void loadPromptTemplates();
   }, []);
+
+  useEffect(() => {
+    if (!selectedPromptKey) {
+      return;
+    }
+    void loadPromptDetail(selectedPromptKey);
+  }, [selectedPromptKey]);
 
   const handleToggleShowAllInfo = (checked: boolean): void => {
     setShowAllInfo(checked);
@@ -323,6 +375,49 @@ export default function Settings() {
       await loadReleaseSources();
     } catch {
       setError('Unable to delete release source');
+    }
+  };
+
+  const handleSavePromptDraft = async () => {
+    if (!selectedPromptKey || !promptDraft.trim()) {
+      setPromptError('Prompt content is required');
+      return;
+    }
+
+    setSavingPromptDraft(true);
+    setPromptMessage('');
+    try {
+      await updatePromptDraft(selectedPromptKey, promptDraft);
+      await loadPromptTemplates();
+      await loadPromptDetail(selectedPromptKey);
+      setPromptError('');
+      setPromptMessage('Draft saved');
+    } catch {
+      setPromptError('Unable to save prompt draft');
+    } finally {
+      setSavingPromptDraft(false);
+    }
+  };
+
+  const handlePublishPrompt = async () => {
+    if (!selectedPromptKey || !promptDraft.trim()) {
+      setPromptError('Prompt content is required');
+      return;
+    }
+
+    setPublishingPrompt(true);
+    setPromptMessage('');
+    try {
+      await publishPrompt(selectedPromptKey, promptDraft);
+      const history = await getPromptHistory(selectedPromptKey);
+      setPromptHistory(history);
+      await loadPromptTemplates();
+      setPromptError('');
+      setPromptMessage('Prompt published');
+    } catch {
+      setPromptError('Unable to publish prompt');
+    } finally {
+      setPublishingPrompt(false);
     }
   };
 
@@ -765,6 +860,122 @@ export default function Settings() {
     </div>
   );
 
+  const renderPromptsView = () => {
+    const selectedTemplate = promptTemplates.find((item) => item.key === selectedPromptKey) || null;
+
+    return (
+      <div className="space-y-5">
+        <div className="flex items-center justify-between">
+          <h3 className="text-2xl font-semibold text-white">Prompt Manager</h3>
+          <button
+            type="button"
+            onClick={() => void loadPromptTemplates()}
+            className="rounded-md bg-[#1f2937] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#374151]"
+          >
+            Refresh
+          </button>
+        </div>
+
+        {promptError && <p className="text-sm text-[#dc2626]">{promptError}</p>}
+        {promptMessage && <p className="text-sm text-[#16a34a]">{promptMessage}</p>}
+
+        <div className="grid gap-4 lg:grid-cols-[320px,1fr]">
+          <aside className="rounded-lg border border-[#222222] bg-[#111111] p-3">
+            <p className="mb-2 text-xs uppercase tracking-[0.08em] text-[#888888]">Available prompts</p>
+            {loadingPrompts ? (
+              <p className="text-sm text-[#b3b3b3]">Loading prompts...</p>
+            ) : promptTemplates.length === 0 ? (
+              <p className="text-sm text-[#b3b3b3]">No prompts found.</p>
+            ) : (
+              <div className="space-y-2">
+                {promptTemplates.map((template) => (
+                  <button
+                    key={template.key}
+                    type="button"
+                    onClick={() => setSelectedPromptKey(template.key)}
+                    className={`w-full rounded-md border px-3 py-2 text-left transition-colors ${
+                      selectedPromptKey === template.key
+                        ? 'border-[#2563eb] bg-[#172554] text-white'
+                        : 'border-[#2b2b2b] bg-[#0f0f0f] text-[#d4d4d4] hover:border-[#3b82f6]'
+                    }`}
+                  >
+                    <p className="text-sm font-semibold">{template.title}</p>
+                    <p className="mt-1 text-xs text-[#9ca3af]">{template.key}</p>
+                    <p className="mt-1 text-xs text-[#93c5fd]">Published v{template.active_version}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </aside>
+
+          <div className="space-y-4 rounded-lg border border-[#222222] bg-[#111111] p-5">
+            {!selectedTemplate ? (
+              <p className="text-sm text-[#b3b3b3]">Select a prompt from the left panel.</p>
+            ) : (
+              <>
+                <div>
+                  <h4 className="text-lg font-semibold text-white">{selectedTemplate.title}</h4>
+                  <p className="mt-1 text-sm text-[#9ca3af]">{selectedTemplate.description || 'No description'}</p>
+                  <p className="mt-1 text-xs text-[#93c5fd]">Key: {selectedTemplate.key}</p>
+                </div>
+
+                <div>
+                  <label htmlFor="promptDraft" className="mb-1 block text-[12px] uppercase tracking-[0.05em] text-[#888888]">
+                    Draft content
+                  </label>
+                  <textarea
+                    id="promptDraft"
+                    value={promptDraft}
+                    onChange={(e) => setPromptDraft(e.target.value)}
+                    rows={18}
+                    className="w-full rounded-md border border-[#333333] bg-[#0a0a0a] px-3.5 py-2.5 font-mono text-xs text-white outline-none transition-colors focus:border-[#2563eb]"
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleSavePromptDraft()}
+                    disabled={savingPromptDraft}
+                    className="rounded-md bg-[#2563eb] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#1d4ed8] disabled:opacity-50"
+                  >
+                    {savingPromptDraft ? 'Saving draft...' : 'Save Draft'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handlePublishPrompt()}
+                    disabled={publishingPrompt}
+                    className="rounded-md bg-[#16a34a] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#15803d] disabled:opacity-50"
+                  >
+                    {publishingPrompt ? 'Publishing...' : 'Publish'}
+                  </button>
+                </div>
+
+                <div className="rounded-md border border-[#2b2b2b] bg-[#0d0d0d] p-3">
+                  <p className="mb-2 text-xs uppercase tracking-[0.08em] text-[#888888]">History</p>
+                  {promptHistory.length === 0 ? (
+                    <p className="text-sm text-[#b3b3b3]">No history found.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {promptHistory.map((item) => (
+                        <li key={item.id} className="rounded border border-[#262626] bg-[#121212] p-2 text-xs text-[#d1d5db]">
+                          <p>
+                            v{item.version} {item.is_active ? '(active)' : ''}
+                          </p>
+                          <p className="text-[#9ca3af]">{new Date(item.created_at).toLocaleString()}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <section className="space-y-5">
       <div className="rounded-lg border border-[#4b3a0b] bg-[#17130a] p-4">
@@ -802,11 +1013,15 @@ export default function Settings() {
         <TabButton active={activeView === 'health'} onClick={() => setActiveView('health')}>
           Release Source Health Check
         </TabButton>
+        <TabButton active={activeView === 'prompts'} onClick={() => setActiveView('prompts')}>
+          Prompt Manager
+        </TabButton>
       </div>
 
       {activeView === 'queries' && renderQueriesView()}
       {activeView === 'sources' && renderSourcesView()}
       {activeView === 'health' && renderHealthView()}
+      {activeView === 'prompts' && renderPromptsView()}
     </section>
   );
 }

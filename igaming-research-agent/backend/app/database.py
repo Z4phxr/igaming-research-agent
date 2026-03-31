@@ -325,6 +325,16 @@ def init_db() -> None:
     ensure_release_source_runtime_columns()
     ensure_app_migrations_table()
     apply_release_source_data_migration()
+    ensure_prompt_templates_seeded()
+
+
+def ensure_prompt_templates_seeded() -> None:
+    """Create baseline prompt templates for prompt manager."""
+    from app.services.prompt_manager import ensure_default_prompt_templates
+
+    with SessionLocal() as session:
+        ensure_default_prompt_templates(session)
+        session.commit()
 
 
 def ensure_article_runtime_columns() -> None:

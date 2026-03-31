@@ -292,14 +292,14 @@ def run_articles_pipeline(db: Session | None = None, raise_on_error: bool = Fals
         if not recent_articles:
             logger.warning("Daily pipeline freshness gate rejected all scraped articles")
 
-        analysis_result = run_analysis_pipeline(recent_articles)
+        analysis_result = run_analysis_pipeline(recent_articles, db=session)
         final_articles = analysis_result.get("final_articles", [])
         all_articles = freshness_rejections + analysis_result.get("all_articles", [])
         logger.info("Articles pipeline step analysis complete: count=%s", len(final_articles))
         if not final_articles:
             logger.warning("Daily pipeline analysis returned no final articles")
 
-        briefing_text = generate_briefing(final_articles)
+        briefing_text = generate_briefing(final_articles, db=session)
         briefing_generated_at = None
         if briefing_text is None:
             logger.warning("Briefing generation failed or returned empty; saving blank briefing")

@@ -95,8 +95,8 @@ def test_run_analysis_pipeline_filters_and_sorts(monkeypatch):
         "https://b": {**articles[1], "score": 5, "summary": "sum", "tags": "technology"},
     }
 
-    monkeypatch.setattr(analyzer, "is_relevant", lambda article: relevance[article["url"]])
-    monkeypatch.setattr(analyzer, "score_and_summarize", lambda article: scored.get(article["url"]))
+    monkeypatch.setattr(analyzer, "is_relevant", lambda article, db=None: relevance[article["url"]])
+    monkeypatch.setattr(analyzer, "score_and_summarize", lambda article, db=None: scored.get(article["url"]))
 
     result = analyzer.run_analysis_pipeline(articles)
 

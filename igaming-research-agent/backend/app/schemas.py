@@ -128,3 +128,39 @@ class ReleaseSourceOut(ReleaseSourceBase):
     updated_at: Optional[datetime.datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class PromptTemplateVersionOut(BaseModel):
+    id: int
+    version: int
+    content: str
+    is_active: bool
+    created_at: datetime.datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PromptTemplateOut(BaseModel):
+    id: int
+    key: str
+    title: str
+    description: Optional[str] = None
+    draft_content: str
+    active_content: str
+    active_version: int
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PromptTemplateDetailOut(PromptTemplateOut):
+    history: list[PromptTemplateVersionOut] = []
+
+
+class PromptTemplateDraftUpdate(BaseModel):
+    draft_content: str = Field(..., min_length=1)
+
+
+class PromptTemplatePublishRequest(BaseModel):
+    content: Optional[str] = Field(default=None, min_length=1)

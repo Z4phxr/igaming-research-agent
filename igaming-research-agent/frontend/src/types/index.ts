@@ -130,3 +130,27 @@ export interface ArticleFeedback {
   user_corrected_score: number | null;
   created_at: string;
 }
+
+export interface PromptTemplateVersion {
+  id: number;
+  version: number;
+  content: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface PromptTemplate {
+  id: number;
+  key: string;
+  title: string;
+  description: string | null;
+  draft_content: string;
+  active_content: string;
+  active_version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PromptTemplateDetail extends PromptTemplate {
+  history: PromptTemplateVersion[];
+}

@@ -5,6 +5,12 @@ import os
 from typing import Optional
 
 from anthropic import Anthropic
+from sqlalchemy.orm import Session
+
+from app.services.prompt_manager import (
+    PROMPT_KEY_BRIEFING_SYSTEM,
+    get_active_prompt_content,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +20,7 @@ if not _anthropic_api_key:
 
 anthropic_client = Anthropic(api_key=_anthropic_api_key)
 
-_SYSTEM_PROMPT = """
+_SYSTEM_PROMPT_FALLBACK = """
 You are a news intelligence analyst for USA iGaming journalists. 
 Your job is to synthesize daily news into a briefing that journalists 
 can use as research for their own articles.
@@ -50,7 +56,7 @@ Structure your briefing EXACTLY like this:
 """
 
 
-def generate_briefing(articles: list[dict]) -> Optional[str]:
+def generate_briefing(articles: list[dict], db: Session | None = None) -> Optional[str]:
     """Generate a polished briefing narrative from top scored articles."""
     if not articles:
         return None
@@ -68,11 +74,12 @@ def generate_briefing(articles: list[dict]) -> Optional[str]:
     context_string = "\n".join(parts)
 
     try:
+        system_prompt = get_active_prompt_content(db, PROMPT_KEY_BRIEFING_SYSTEM, _SYSTEM_PROMPT_FALLBACK)
         response = anthropic_client.messages.create(
             model="claude-sonnet-4-5",
             max_tokens=1500,
             temperature=0.3,
-            system=_SYSTEM_PROMPT,
+            system=system_prompt,
             messages=[{"role": "user", "content": f"Today's top iGaming stories:\n\n{context_string}"}],
         )
     except Exception as exc:

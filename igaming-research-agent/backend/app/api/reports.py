@@ -19,7 +19,7 @@ router = APIRouter()
 feedback_router = APIRouter()
 
 
-def _serialize_report(report: ReportModel, show_all: bool, show_all_info: bool) -> dict:
+def _serialize_report(report: ReportModel, show_all: bool, show_all_info: bool, db: Session) -> dict:
     top_story_articles = [
         article
         for article in report.articles
@@ -60,7 +60,7 @@ def _serialize_report(report: ReportModel, show_all: bool, show_all_info: bool) 
         }
 
         if not bool(article.kept):
-            payload.update(build_rejection_metadata(payload, include_llm_why=show_all_info))
+            payload.update(build_rejection_metadata(payload, include_llm_why=show_all_info, db=db))
 
         return payload
 
@@ -193,7 +193,7 @@ def get_latest_report(show_all: bool = False, show_all_info: bool = False, db: S
     )
     if report is None:
         raise HTTPException(status_code=404, detail="No reports found")
-    return _serialize_report(report, show_all=show_all, show_all_info=show_all_info)
+    return _serialize_report(report, show_all=show_all, show_all_info=show_all_info, db=db)
 
 
 @router.get("/{report_id}")
@@ -206,7 +206,7 @@ def get_report(report_id: int, show_all: bool = False, show_all_info: bool = Fal
     )
     if report is None:
         raise HTTPException(status_code=404, detail="Report not found")
-    return _serialize_report(report, show_all=show_all, show_all_info=show_all_info)
+    return _serialize_report(report, show_all=show_all, show_all_info=show_all_info, db=db)
 
 
 @feedback_router.post("/articles/{article_id}/feedback")

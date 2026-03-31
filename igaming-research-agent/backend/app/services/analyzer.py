@@ -9,6 +9,14 @@ import re
 from typing import Optional
 
 from anthropic import Anthropic
+from sqlalchemy.orm import Session
+
+from app.services.prompt_manager import (
+    PROMPT_KEY_REJECTION_EXPLAIN_SYSTEM,
+    PROMPT_KEY_RELEVANCE_SYSTEM,
+    PROMPT_KEY_SCORING_SYSTEM,
+    get_active_prompt_content,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +31,7 @@ anthropic_client = Anthropic(api_key=_anthropic_api_key)
 # narrative generation in report_generator.py only.
 _MODEL = os.getenv("ANTHROPIC_ANALYZER_MODEL", "claude-3-5-haiku-latest").strip() or "claude-3-5-haiku-latest"
 
-_RELEVANCE_SYSTEM_PROMPT = """
+_RELEVANCE_SYSTEM_PROMPT_FALLBACK = """
 You are a strict content filter for a USA iGaming research agent.
 Answer only YES or NO.
 
@@ -43,7 +51,7 @@ Answer NO if:
 - International news (UK, Europe, Asia) unless it directly impacts USA companies
 """
 
-_SCORING_SYSTEM_PROMPT = """
+_SCORING_SYSTEM_PROMPT_FALLBACK = """
 You are a senior analyst for a USA iGaming investment research firm.
 Analyze the article and respond in this EXACT format with no extra text:
 
@@ -88,7 +96,7 @@ CRITICAL: If article mentions bill number (SB/HB/AB) + committee/vote, minimum s
 If federal agency (CFTC/DOJ/SEC) takes action, minimum score is 8.
 """
 
-_REJECTION_EXPLAIN_SYSTEM_PROMPT = """
+_REJECTION_EXPLAIN_SYSTEM_PROMPT_FALLBACK = """
 You explain why an article was rejected in an iGaming research pipeline.
 Be specific, concise, and factual.
 
@@ -282,7 +290,7 @@ def _base_rejection_metadata(article: dict) -> dict:
     }
 
 
-def _explain_rejection_with_llm(article: dict, metadata: dict) -> Optional[str]:
+def _explain_rejection_with_llm(article: dict, metadata: dict, db: Session | None = None) -> Optional[str]:
     """Return optional LLM explanation for rejected article when explicitly enabled."""
     stage = str(metadata.get("rejection_stage") or "pipeline")
     if stage not in {"relevance", "scoring"}:
@@ -303,11 +311,16 @@ def _explain_rejection_with_llm(article: dict, metadata: dict) -> Optional[str]:
     )
 
     try:
+        system_prompt = get_active_prompt_content(
+            db,
+            PROMPT_KEY_REJECTION_EXPLAIN_SYSTEM,
+            _REJECTION_EXPLAIN_SYSTEM_PROMPT_FALLBACK,
+        )
         response = anthropic_client.messages.create(
             model=_MODEL,
             max_tokens=120,
             temperature=0,
-            system=_REJECTION_EXPLAIN_SYSTEM_PROMPT,
+            system=system_prompt,
             messages=[{"role": "user", "content": prompt}],
         )
         output = response.content[0].text.strip() if response.content else ""
@@ -322,23 +335,24 @@ def _explain_rejection_with_llm(article: dict, metadata: dict) -> Optional[str]:
         return None
 
 
-def build_rejection_metadata(article: dict, include_llm_why: bool = False) -> dict:
+def build_rejection_metadata(article: dict, include_llm_why: bool = False, db: Session | None = None) -> dict:
     """Create rejection metadata for UI cards, with optional LLM explanation."""
     metadata = _base_rejection_metadata(article)
     metadata["rejection_llm_why"] = None
 
     if include_llm_why:
-        metadata["rejection_llm_why"] = _explain_rejection_with_llm(article, metadata)
+        metadata["rejection_llm_why"] = _explain_rejection_with_llm(article, metadata, db=db)
 
     return metadata
 
 
-def is_relevant(article: dict) -> bool:
+def is_relevant(article: dict, db: Session | None = None) -> bool:
     """Run stage-one binary relevance check (YES/NO) for a scraped article."""
     item = _safe_article(article)
     user_message = f"Title: {item['title']}\n\nSnippet: {item['snippet']}"
 
     try:
+        system_prompt = get_active_prompt_content(db, PROMPT_KEY_RELEVANCE_SYSTEM, _RELEVANCE_SYSTEM_PROMPT_FALLBACK)
         # Cost optimization: max_tokens=5 for a strict YES/NO answer.
         # Cost optimization: temperature=0 for deterministic outputs.
         # CHANGE 3: migrated model calls from OpenAI chat completions to Anthropic messages API.
@@ -346,7 +360,7 @@ def is_relevant(article: dict) -> bool:
             model=_MODEL,
             max_tokens=10,
             temperature=0,
-            system=_RELEVANCE_SYSTEM_PROMPT,
+            system=system_prompt,
             messages=[{"role": "user", "content": user_message}],
         )
         content = response.content[0].text.strip() if response.content else ""
@@ -361,7 +375,7 @@ def is_relevant(article: dict) -> bool:
         return False
 
 
-def score_and_summarize(article: dict | str) -> Optional[dict]:
+def score_and_summarize(article: dict | str, db: Session | None = None) -> Optional[dict]:
     """Run stage-two scoring and 3-sentence summarization for a relevant article.
 
     Accepts the primary dict payload, and also supports legacy raw-text input
@@ -383,6 +397,7 @@ def score_and_summarize(article: dict | str) -> Optional[dict]:
     user_message = f"Content: {content}"
 
     try:
+        system_prompt = get_active_prompt_content(db, PROMPT_KEY_SCORING_SYSTEM, _SCORING_SYSTEM_PROMPT_FALLBACK)
         # Cost optimization: content is truncated to 3000 chars before request.
         # Cost optimization: temperature=0 for deterministic outputs.
         # CHANGE 3: migrated model calls from OpenAI chat completions to Anthropic messages API.
@@ -390,7 +405,7 @@ def score_and_summarize(article: dict | str) -> Optional[dict]:
             model=_MODEL,
             max_tokens=200,
             temperature=0,
-            system=_SCORING_SYSTEM_PROMPT,
+            system=system_prompt,
             messages=[{"role": "user", "content": user_message}],
         )
     except Exception as exc:
@@ -446,7 +461,7 @@ def score_and_summarize(article: dict | str) -> Optional[dict]:
     }
 
 
-def run_analysis_pipeline(articles: list[dict]) -> dict[str, list[dict]]:
+def run_analysis_pipeline(articles: list[dict], db: Session | None = None) -> dict[str, list[dict]]:
     """Run two-stage relevance/scoring and return kept + all analyzed articles."""
     if not articles:
         logger.info("Analysis pipeline received no articles; nothing to do")
@@ -456,7 +471,7 @@ def run_analysis_pipeline(articles: list[dict]) -> dict[str, list[dict]]:
     all_articles: list[dict] = []
 
     for article in articles:
-        if is_relevant(article):
+        if is_relevant(article, db=db):
             relevant_articles.append(article)
         else:
             all_articles.append(
@@ -474,7 +489,7 @@ def run_analysis_pipeline(articles: list[dict]) -> dict[str, list[dict]]:
 
     scored_results: list[dict] = []
     for article in relevant_articles:
-        scored = score_and_summarize(article)
+        scored = score_and_summarize(article, db=db)
         if scored is not None:
             scored_results.append(scored)
         else:

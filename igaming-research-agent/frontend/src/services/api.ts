@@ -3,6 +3,9 @@ import type {
   CreateQueryDto,
   CreateReleaseSourceDto,
   FeedbackType,
+  PromptTemplate,
+  PromptTemplateDetail,
+  PromptTemplateVersion,
   Query,
   ReleaseSource,
   ReleaseSourceHealthCheckResponse,
@@ -289,5 +292,53 @@ export async function runReleasesPipeline(): Promise<{ status: string; message: 
       }
     }
     throw new Error(getApiErrorMessage(error, 'Failed to run releases pipeline.'));
+  }
+}
+
+export async function getPromptTemplates(): Promise<PromptTemplate[]> {
+  try {
+    const { data } = await api.get<PromptTemplate[]>('/prompts');
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to fetch prompt templates.'));
+  }
+}
+
+export async function getPromptTemplate(promptKey: string): Promise<PromptTemplateDetail> {
+  try {
+    const { data } = await api.get<PromptTemplateDetail>(`/prompts/${promptKey}`);
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to fetch prompt template details.'));
+  }
+}
+
+export async function updatePromptDraft(promptKey: string, draftContent: string): Promise<PromptTemplate> {
+  try {
+    const { data } = await api.put<PromptTemplate>(`/prompts/${promptKey}/draft`, {
+      draft_content: draftContent,
+    });
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to save prompt draft.'));
+  }
+}
+
+export async function publishPrompt(promptKey: string, content?: string): Promise<PromptTemplate> {
+  try {
+    const payload = content ? { content } : {};
+    const { data } = await api.post<PromptTemplate>(`/prompts/${promptKey}/publish`, payload);
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to publish prompt.'));
+  }
+}
+
+export async function getPromptHistory(promptKey: string): Promise<PromptTemplateVersion[]> {
+  try {
+    const { data } = await api.get<PromptTemplateVersion[]>(`/prompts/${promptKey}/history`);
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to fetch prompt history.'));
   }
 }
