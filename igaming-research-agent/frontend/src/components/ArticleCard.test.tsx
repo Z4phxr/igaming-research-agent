@@ -46,7 +46,7 @@ describe('ArticleCard', () => {
           passed_relevance_filter: false,
           tags: '',
           source_domain: 'example.com',
-          published_date: null,
+          published_date: '',
           scraped_date: new Date().toISOString(),
         }}
       />,
