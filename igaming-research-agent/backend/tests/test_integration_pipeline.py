@@ -72,7 +72,7 @@ def test_full_pipeline_saves_analyzed_article(monkeypatch):
     verify.close()
 
 
-def test_pipeline_rejects_article_missing_published_date(monkeypatch):
+def test_pipeline_keeps_article_missing_published_date(monkeypatch):
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
     test_session_local = sessionmaker(bind=engine, autocommit=False, autoflush=False)
     Base.metadata.create_all(bind=engine)
@@ -93,8 +93,33 @@ def test_pipeline_rejects_article_missing_published_date(monkeypatch):
 
     def fake_run_analysis_pipeline(articles):
         called["analyze"] += 1
-        assert articles == []
-        return {"final_articles": [], "all_articles": []}
+        assert len(articles) == 1
+        return {
+            "final_articles": [
+                {
+                    **articles[0],
+                    "score": 7,
+                    "raw_score": 7,
+                    "summary": "Relevant",
+                    "tags": "regulation",
+                    "passed_relevance_filter": True,
+                    "kept": True,
+                    "rejection_reason": None,
+                }
+            ],
+            "all_articles": [
+                {
+                    **articles[0],
+                    "score": 7,
+                    "raw_score": 7,
+                    "summary": "Relevant",
+                    "tags": "regulation",
+                    "passed_relevance_filter": True,
+                    "kept": True,
+                    "rejection_reason": None,
+                }
+            ],
+        }
 
     monkeypatch.setattr(scheduler, "run_analysis_pipeline", fake_run_analysis_pipeline)
 
@@ -107,10 +132,10 @@ def test_pipeline_rejects_article_missing_published_date(monkeypatch):
     assert called["analyze"] == 1
     assert report is not None
     assert report.total_articles_found == 1
-    assert report.total_articles_kept == 0
+    assert report.total_articles_kept == 1
     assert article is not None
-    assert article.rejection_reason == "Rejected: fail to check the date"
-    assert article.kept is False
+    assert article.rejection_reason is None
+    assert article.kept is True
     assert article.published_date is None
     verify.close()
 

@@ -315,7 +315,12 @@ def _split_recent_articles(
     now_utc: datetime.datetime,
     db: Session | None = None,
 ) -> tuple[list[dict], list[dict]]:
-    """Split articles by strict 24h freshness policy using published_date."""
+    """Split articles by freshness policy.
+
+    If published_date is missing/unparseable, keep the article and trust
+    upstream query window filtering. Only reject when a parsable date is
+    explicitly stale or in the future.
+    """
     cutoff = now_utc - datetime.timedelta(hours=24)
     recent: list[dict] = []
     rejected: list[dict] = []
@@ -323,7 +328,13 @@ def _split_recent_articles(
     for article in articles:
         published_at, date_source = _infer_article_published_date(article, now_utc=now_utc, db=db)
         if published_at is None:
-            rejected.append(_reject_article(article, DATE_CHECK_FAILED_REASON))
+            recent.append(
+                {
+                    **article,
+                    "published_date": None,
+                    "date_inference_source": "upstream_window",
+                }
+            )
             continue
 
         if published_at > now_utc:
