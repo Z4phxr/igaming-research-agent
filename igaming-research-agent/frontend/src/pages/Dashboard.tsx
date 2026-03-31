@@ -100,6 +100,17 @@ export default function Dashboard() {
     day: 'numeric',
   })} ${today.getFullYear()}`;
 
+  const formatRunTime = (value?: string | null): string => {
+    if (!value) {
+      return 'Not run yet';
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return 'Not available';
+    }
+    return parsed.toLocaleString();
+  };
+
   return (
     <section className="space-y-6">
       <div className="space-y-1">
@@ -123,7 +134,12 @@ export default function Dashboard() {
 
       {!loading && !error && latestReport && (
         <div className="space-y-5">
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-4">
+            <div className="rounded-lg border border-[#222222] bg-[#111111] p-4 text-center">
+              <p className="text-xs uppercase tracking-[0.08em] text-[#555555]">Pipeline Time</p>
+              <p className="mt-2 text-[11px] text-[#888888]">Articles: <span className="text-[#cbd5e1]">{formatRunTime(latestReport.articles_pipeline_ran_at)}</span></p>
+              <p className="mt-1 text-[11px] text-[#888888]">Releases: <span className="text-[#cbd5e1]">{formatRunTime(latestReport.releases_pipeline_ran_at)}</span></p>
+            </div>
             <div className="rounded-lg border border-[#222222] bg-[#111111] p-4 text-center">
               <p className="text-xs uppercase tracking-[0.08em] text-[#555555]">Articles Screened</p>
               <p className="mt-2 font-mono text-2xl text-[#2563eb]">{latestReport.total_articles_found ?? 0}</p>

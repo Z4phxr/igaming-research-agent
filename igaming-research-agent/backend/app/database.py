@@ -381,6 +381,10 @@ def ensure_report_runtime_columns() -> None:
         statements.append("ALTER TABLE reports ADD COLUMN briefing TEXT")
     if "briefing_generated_at" not in existing_columns:
         statements.append("ALTER TABLE reports ADD COLUMN briefing_generated_at TIMESTAMP")
+    if "articles_pipeline_ran_at" not in existing_columns:
+        statements.append("ALTER TABLE reports ADD COLUMN articles_pipeline_ran_at TIMESTAMP")
+    if "releases_pipeline_ran_at" not in existing_columns:
+        statements.append("ALTER TABLE reports ADD COLUMN releases_pipeline_ran_at TIMESTAMP")
 
     if not statements:
         return

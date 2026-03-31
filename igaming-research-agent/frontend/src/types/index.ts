@@ -35,6 +35,8 @@ export interface Report {
   id: number;
   report_date: string;
   generated_at: string;
+  articles_pipeline_ran_at?: string | null;
+  releases_pipeline_ran_at?: string | null;
   total_articles_found: number;
   total_articles_kept: number;
   briefing?: string | null;

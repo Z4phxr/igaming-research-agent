@@ -417,6 +417,8 @@ def _get_or_create_daily_report(session: Session, report_date: datetime.date) ->
         total_articles_kept=0,
         briefing="",
         briefing_generated_at=None,
+        articles_pipeline_ran_at=None,
+        releases_pipeline_ran_at=None,
         generated_at=datetime.datetime.utcnow(),
         articles=[],
     )
@@ -503,6 +505,7 @@ def run_articles_pipeline(db: Session | None = None, raise_on_error: bool = Fals
         report.total_articles_kept = sum(1 for item in all_articles if item.get("kept"))
         report.briefing = briefing_text
         report.briefing_generated_at = briefing_generated_at
+        report.articles_pipeline_ran_at = datetime.datetime.utcnow()
         report.generated_at = datetime.datetime.utcnow()
         _attach_report_articles(report, persisted_articles)
 
@@ -549,6 +552,7 @@ def run_release_pipeline(db: Session | None = None, raise_on_error: bool = False
         persisted_articles = _persist_articles(session, release_articles)
 
         report = _get_or_create_daily_report(session, report_date=datetime.date.today())
+        report.releases_pipeline_ran_at = datetime.datetime.utcnow()
         report.generated_at = datetime.datetime.utcnow()
         _attach_report_articles(report, persisted_articles)
 

@@ -114,6 +114,8 @@ class Report(Base):
     total_articles_kept: Mapped[int | None] = mapped_column(Integer, nullable=True)
     briefing: Mapped[str | None] = mapped_column(Text, nullable=True)
     briefing_generated_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
+    articles_pipeline_ran_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
+    releases_pipeline_ran_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
     generated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow, nullable=False)
 
     articles: Mapped[list[Article]] = relationship("Article", secondary=report_articles, back_populates="reports")

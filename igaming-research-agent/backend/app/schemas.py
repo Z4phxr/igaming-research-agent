@@ -60,6 +60,8 @@ class ReportSummaryOut(BaseModel):
     total_articles_kept: Optional[int] = None
     briefing: Optional[str] = None
     briefing_generated_at: Optional[datetime.datetime] = None
+    articles_pipeline_ran_at: Optional[datetime.datetime] = None
+    releases_pipeline_ran_at: Optional[datetime.datetime] = None
     generated_at: datetime.datetime
 
     model_config = ConfigDict(from_attributes=True)
