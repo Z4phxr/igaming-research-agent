@@ -18,6 +18,9 @@ import {
   updatePromptDraft,
   updateReleaseSource,
   updateQuery,
+  getPipelineSettings,
+  updatePipelineSettings,
+  type PipelineSettings,
 } from '@/services/api';
 import type {
   CreateQueryDto,
@@ -29,7 +32,7 @@ import type {
   ReleaseSourceHealthCheckResult,
 } from '@/types';
 
-type SettingsView = 'queries' | 'sources' | 'health' | 'prompts';
+type SettingsView = 'queries' | 'sources' | 'health' | 'prompts' | 'pipeline';
 
 export default function Settings() {
   const [activeView, setActiveView] = useState<SettingsView>('queries');
@@ -45,6 +48,10 @@ export default function Settings() {
   const [healthError, setHealthError] = useState('');
   const [healthSummary, setHealthSummary] = useState<ReleaseSourceHealthCheckResponse | null>(null);
   const [healthResults, setHealthResults] = useState<ReleaseSourceHealthCheckResult[]>([]);
+
+  const [pipelineSettings, setPipelineSettings] = useState<PipelineSettings | null>(null);
+  const [savingPipelineSettings, setSavingPipelineSettings] = useState(false);
+  const [pipelineSettingsError, setPipelineSettingsError] = useState('');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [streamType, setStreamType] = useState('legislative');
@@ -146,12 +153,23 @@ export default function Settings() {
     }
   };
 
+  const loadPipelineSettings = async () => {
+    try {
+      const settings = await getPipelineSettings();
+      setPipelineSettings(settings);
+      setPipelineSettingsError('');
+    } catch {
+      setPipelineSettingsError('Unable to load pipeline settings');
+    }
+  };
+
   useEffect(() => {
     setShowAllInfo(readShowAllInfoSetting());
 
     void loadQueries();
     void loadReleaseSources();
     void loadPromptTemplates();
+    void loadPipelineSettings();
   }, []);
 
   useEffect(() => {
@@ -294,6 +312,29 @@ export default function Settings() {
       setHealthError(runError instanceof Error ? runError.message : 'Unable to run company health check');
     } finally {
       setRunningSingleHealthCheckId(null);
+    }
+  };
+
+  const handleSavePipelineSettings = async () => {
+    if (!pipelineSettings) {
+      setPipelineSettingsError('Settings not loaded');
+      return;
+    }
+
+    setSavingPipelineSettings(true);
+    setPipelineSettingsError('');
+    try {
+      const updated = await updatePipelineSettings({
+        scheduler_hour: pipelineSettings.scheduler_hour,
+        scheduler_minute: pipelineSettings.scheduler_minute,
+        scheduler_timezone: pipelineSettings.scheduler_timezone,
+      });
+      setPipelineSettings(updated);
+      alert('Pipeline schedule updated. Note: changes take effect after app restart.');
+    } catch (error) {
+      setPipelineSettingsError(error instanceof Error ? error.message : 'Unable to save pipeline settings');
+    } finally {
+      setSavingPipelineSettings(false);
     }
   };
 
@@ -976,6 +1017,113 @@ export default function Settings() {
     );
   };
 
+  const renderPipelineSettingsView = () => (
+    <div className="space-y-5">
+      <h3 className="text-2xl font-semibold text-white">Pipeline Schedule</h3>
+
+      <div className="rounded-lg border border-[#4b5563] bg-[#0f172a] p-4">
+        <p className="text-xs uppercase tracking-[0.08em] text-[#888888] mb-2">About scheduling</p>
+        <p className="text-sm text-[#cbd5e1]">
+          The pipeline automatically runs at the configured time every day in UTC timezone. Changes take effect after the application restarts.
+        </p>
+      </div>
+
+      {pipelineSettingsError && (
+        <div className="rounded-lg border border-[#7f1d1d] bg-[#2a1111] p-4">
+          <p className="text-sm text-[#fca5a5]">{pipelineSettingsError}</p>
+        </div>
+      )}
+
+      {pipelineSettings && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void handleSavePipelineSettings();
+          }}
+          className="w-full max-w-2xl space-y-4 rounded-lg border border-[#222222] bg-[#111111] p-5"
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="schedulerHour" className="mb-1 block text-[12px] uppercase tracking-[0.05em] text-[#888888]">
+                Hour (UTC)
+              </label>
+              <input
+                id="schedulerHour"
+                type="number"
+                min="0"
+                max="23"
+                value={pipelineSettings.scheduler_hour}
+                onChange={(e) =>
+                  setPipelineSettings({
+                    ...pipelineSettings,
+                    scheduler_hour: Math.max(0, Math.min(23, parseInt(e.target.value) || 0)),
+                  })
+                }
+                className="w-full rounded-md border border-[#333333] bg-[#0a0a0a] px-3.5 py-2.5 text-sm text-white outline-none transition-colors focus:border-[#2563eb]"
+              />
+              <p className="mt-1 text-xs text-[#888888]">0-23</p>
+            </div>
+
+            <div>
+              <label htmlFor="schedulerMinute" className="mb-1 block text-[12px] uppercase tracking-[0.05em] text-[#888888]">
+                Minute (UTC)
+              </label>
+              <input
+                id="schedulerMinute"
+                type="number"
+                min="0"
+                max="59"
+                value={pipelineSettings.scheduler_minute}
+                onChange={(e) =>
+                  setPipelineSettings({
+                    ...pipelineSettings,
+                    scheduler_minute: Math.max(0, Math.min(59, parseInt(e.target.value) || 0)),
+                  })
+                }
+                className="w-full rounded-md border border-[#333333] bg-[#0a0a0a] px-3.5 py-2.5 text-sm text-white outline-none transition-colors focus:border-[#2563eb]"
+              />
+              <p className="mt-1 text-xs text-[#888888]">0-59</p>
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="schedulerTimezone" className="mb-1 block text-[12px] uppercase tracking-[0.05em] text-[#888888]">
+              Timezone
+            </label>
+            <input
+              id="schedulerTimezone"
+              type="text"
+              value={pipelineSettings.scheduler_timezone}
+              onChange={(e) =>
+                setPipelineSettings({
+                  ...pipelineSettings,
+                  scheduler_timezone: e.target.value || 'UTC',
+                })
+              }
+              className="w-full rounded-md border border-[#333333] bg-[#0a0a0a] px-3.5 py-2.5 text-sm text-white outline-none transition-colors focus:border-[#2563eb]"
+            />
+            <p className="mt-1 text-xs text-[#888888]">e.g., UTC, America/New_York, Europe/London</p>
+          </div>
+
+          <div className="rounded-lg border border-[#1f2937] bg-[#10141f] p-3">
+            <p className="text-sm text-[#cbd5e1]">
+              <strong>Current schedule:</strong> {pipelineSettings.scheduler_hour.toString().padStart(2, '0')}:
+              {pipelineSettings.scheduler_minute.toString().padStart(2, '0')} {pipelineSettings.scheduler_timezone}
+            </p>
+          </div>
+
+          <button
+            className="rounded-md bg-[#2563eb] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1d4ed8] disabled:opacity-50"
+            type="submit"
+            disabled={savingPipelineSettings}
+          >
+            {savingPipelineSettings ? 'Saving...' : 'Save Schedule'}
+          </button>
+        </form>
+      )}
+    </div>
+  );
+
   return (
     <section className="space-y-5">
       <div className="rounded-lg border border-[#4b3a0b] bg-[#17130a] p-4">
@@ -1016,12 +1164,16 @@ export default function Settings() {
         <TabButton active={activeView === 'prompts'} onClick={() => setActiveView('prompts')}>
           Prompt Manager
         </TabButton>
+        <TabButton active={activeView === 'pipeline'} onClick={() => setActiveView('pipeline')}>
+          Pipeline Schedule
+        </TabButton>
       </div>
 
       {activeView === 'queries' && renderQueriesView()}
       {activeView === 'sources' && renderSourcesView()}
       {activeView === 'health' && renderHealthView()}
       {activeView === 'prompts' && renderPromptsView()}
+      {activeView === 'pipeline' && renderPipelineSettingsView()}
     </section>
   );
 }

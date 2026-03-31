@@ -342,3 +342,33 @@ export async function getPromptHistory(promptKey: string): Promise<PromptTemplat
     throw new Error(getApiErrorMessage(error, 'Failed to fetch prompt history.'));
   }
 }
+
+export interface PipelineSettings {
+  id: number;
+  scheduler_hour: number;
+  scheduler_minute: number;
+  scheduler_timezone: string;
+  updated_at: string;
+}
+
+export async function getPipelineSettings(): Promise<PipelineSettings> {
+  try {
+    const { data } = await api.get<PipelineSettings>('/pipeline-settings');
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to fetch pipeline settings.'));
+  }
+}
+
+export async function updatePipelineSettings(settings: {
+  scheduler_hour: number;
+  scheduler_minute: number;
+  scheduler_timezone?: string;
+}): Promise<PipelineSettings> {
+  try {
+    const { data } = await api.put<PipelineSettings>('/pipeline-settings', settings);
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to update pipeline settings.'));
+  }
+}

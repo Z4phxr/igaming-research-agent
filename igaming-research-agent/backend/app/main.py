@@ -13,6 +13,7 @@ from app.api import queries as queries_router
 from app.api import release_sources as release_sources_router
 from app.api import reports as reports_router
 from app.api import prompts as prompts_router
+from app.api import pipeline_settings as pipeline_settings_router
 from app.config import settings
 from app.database import init_db
 from app import models  # noqa: F401
@@ -64,6 +65,7 @@ app.include_router(queries_router.router, prefix="/api/queries", tags=["queries"
 app.include_router(release_sources_router.router, prefix="/api/release-sources", tags=["release-sources"])
 app.include_router(reports_router.router, prefix="/api/reports", tags=["reports"])
 app.include_router(prompts_router.router, prefix="/api/prompts", tags=["prompts"])
+app.include_router(pipeline_settings_router.router, prefix="/api/pipeline-settings", tags=["pipeline-settings"])
 app.include_router(reports_router.feedback_router, prefix="/api", tags=["reports"])
 
 

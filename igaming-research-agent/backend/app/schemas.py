@@ -164,3 +164,16 @@ class PromptTemplateDraftUpdate(BaseModel):
 
 class PromptTemplatePublishRequest(BaseModel):
     content: Optional[str] = Field(default=None, min_length=1)
+
+
+class PipelineSettingsUpdate(BaseModel):
+    scheduler_hour: int = Field(..., ge=0, le=23)
+    scheduler_minute: int = Field(..., ge=0, le=59)
+    scheduler_timezone: str = Field(default="UTC", min_length=1, max_length=32)
+
+
+class PipelineSettingsOut(PipelineSettingsUpdate):
+    id: int
+    updated_at: datetime.datetime
+
+    model_config = ConfigDict(from_attributes=True)

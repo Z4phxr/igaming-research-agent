@@ -216,6 +216,26 @@ class PromptTemplateVersion(Base):
     template: Mapped[PromptTemplate] = relationship("PromptTemplate", back_populates="versions")
 
 
+class PipelineSettings(Base):
+    """Application-wide pipeline configuration settings."""
+
+    __tablename__ = "pipeline_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    scheduler_hour: Mapped[int] = mapped_column(Integer, default=7, nullable=False)
+    scheduler_minute: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    scheduler_timezone: Mapped[str] = mapped_column(String(32), default="UTC", nullable=False)
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        default=datetime.datetime.utcnow,
+        onupdate=datetime.datetime.utcnow,
+        nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        return f"<PipelineSettings {self.scheduler_hour:02d}:{self.scheduler_minute:02d} {self.scheduler_timezone}>"
+
+
 Index("ix_articles_score", Article.score)
 Index("ix_articles_scraped_date", Article.scraped_date)
 Index("ix_release_sources_company_name", ReleaseSource.company_name)

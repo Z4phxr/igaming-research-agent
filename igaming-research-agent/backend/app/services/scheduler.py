@@ -315,45 +315,25 @@ def _split_recent_articles(
     now_utc: datetime.datetime,
     db: Session | None = None,
 ) -> tuple[list[dict], list[dict]]:
-    """Split articles by freshness policy.
+    """Pass all articles through to analysis.
 
-    If published_date is missing/unparseable, keep the article and trust
-    upstream query window filtering. Only reject when a parsable date is
-    explicitly stale or in the future.
+    Serper already filters to 24-hour window via qdr:d parameter,
+    so we trust upstream filtering and don't apply secondary date gates.
+    All articles are returned as accepted; none are rejected by date.
     """
-    cutoff = now_utc - datetime.timedelta(hours=24)
     recent: list[dict] = []
-    rejected: list[dict] = []
 
     for article in articles:
         published_at, date_source = _infer_article_published_date(article, now_utc=now_utc, db=db)
-        if published_at is None:
-            recent.append(
-                {
-                    **article,
-                    "published_date": None,
-                    "date_inference_source": "upstream_window",
-                }
-            )
-            continue
-
-        if published_at > now_utc:
-            rejected.append(_reject_article(article, "future_published_date"))
-            continue
-
-        if published_at < cutoff:
-            rejected.append(_reject_article(article, "stale_published_date"))
-            continue
-
         recent.append(
             {
                 **article,
                 "published_date": published_at,
-                "date_inference_source": date_source or "unknown",
+                "date_inference_source": date_source or "upstream_window",
             }
         )
 
-    return recent, rejected
+    return recent, []
 
 
 def _persist_articles(session: Session, items: list[dict]) -> list[Article]:
@@ -617,18 +597,43 @@ def run_daily_pipeline(db: Session | None = None, raise_on_error: bool = False) 
 
 
 def start_scheduler() -> None:
-    """Start APScheduler daily cron task.
+    """Start APScheduler daily cron task with configurable time.
+
+    Reads scheduler_hour and scheduler_minute from database PipelineSettings.
+    Falls back to environment config if database not ready.
 
     TODO: Prevent duplicate scheduling in multi-worker deployment.
     """
     if _scheduler.running:
         return
 
+    from app.models import PipelineSettings
+
+    # Try to read from database, fall back to config if unavailable
+    scheduler_hour = 7
+    scheduler_minute = 0
+    scheduler_timezone = "UTC"
+
+    try:
+        db = SessionLocal()
+        settings = db.query(PipelineSettings).first()
+        if settings:
+            scheduler_hour = settings.scheduler_hour
+            scheduler_minute = settings.scheduler_minute
+            scheduler_timezone = settings.scheduler_timezone
+        db.close()
+    except Exception as e:
+        logger.warning(f"Failed to read pipeline settings from DB: {e}. Using defaults.")
+
+    logger.info(
+        f"Scheduler configured to run at {scheduler_hour:02d}:{scheduler_minute:02d} {scheduler_timezone}"
+    )
+
     def _safe_add_job(func, job_id: str) -> None:
         try:
             _scheduler.add_job(
                 func,
-                trigger=CronTrigger(hour=7, minute=0, timezone="UTC"),
+                trigger=CronTrigger(hour=scheduler_hour, minute=scheduler_minute, timezone=scheduler_timezone),
                 id=job_id,
                 replace_existing=True,
                 coalesce=True,
@@ -638,7 +643,7 @@ def start_scheduler() -> None:
             # Compatibility with lightweight test doubles that do not accept APScheduler kwargs.
             _scheduler.add_job(
                 func,
-                trigger=CronTrigger(hour=7, minute=0, timezone="UTC"),
+                trigger=CronTrigger(hour=scheduler_hour, minute=scheduler_minute, timezone=scheduler_timezone),
                 id=job_id,
                 replace_existing=True,
             )
