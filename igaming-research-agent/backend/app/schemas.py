@@ -172,6 +172,7 @@ class PipelineSettingsUpdate(BaseModel):
     scheduler_hour: int = Field(..., ge=0, le=23)
     scheduler_minute: int = Field(..., ge=0, le=59)
     scheduler_timezone: str = Field(default="UTC", min_length=1, max_length=32)
+    release_recent_window_hours: int = Field(default=72, ge=1, le=24 * 30)
 
 
 class PipelineSettingsOut(PipelineSettingsUpdate):

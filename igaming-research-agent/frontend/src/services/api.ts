@@ -354,6 +354,7 @@ export interface PipelineSettings {
   scheduler_hour: number;
   scheduler_minute: number;
   scheduler_timezone: string;
+  release_recent_window_hours: number;
   updated_at: string;
 }
 
@@ -387,6 +388,7 @@ export async function updatePipelineSettings(settings: {
   scheduler_hour: number;
   scheduler_minute: number;
   scheduler_timezone?: string;
+  release_recent_window_hours: number;
 }): Promise<PipelineSettings> {
   try {
     const { data } = await api.put<PipelineSettings>('/pipeline-settings', settings);

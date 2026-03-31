@@ -227,6 +227,7 @@ class PipelineSettings(Base):
     scheduler_hour: Mapped[int] = mapped_column(Integer, default=7, nullable=False)
     scheduler_minute: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     scheduler_timezone: Mapped[str] = mapped_column(String(32), default="UTC", nullable=False)
+    release_recent_window_hours: Mapped[int] = mapped_column(Integer, default=72, nullable=False)
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime,
         default=datetime.datetime.utcnow,
@@ -235,7 +236,10 @@ class PipelineSettings(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<PipelineSettings {self.scheduler_hour:02d}:{self.scheduler_minute:02d} {self.scheduler_timezone}>"
+        return (
+            f"<PipelineSettings {self.scheduler_hour:02d}:{self.scheduler_minute:02d} "
+            f"{self.scheduler_timezone} window={self.release_recent_window_hours}h>"
+        )
 
 
 Index("ix_articles_score", Article.score)

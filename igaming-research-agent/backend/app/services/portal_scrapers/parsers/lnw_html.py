@@ -44,8 +44,17 @@ class LnwHtmlParser(PortalListingParser):
             if not title:
                 continue
 
-            card_text = re.sub(r"\s+", " ", link.parent.get_text(" ", strip=True) if link.parent else "").strip()
-            published = self._parse_mmddyyyy(card_text)
+            row = link.find_parent("tr")
+            if row is not None:
+                row_text = re.sub(r"\s+", " ", row.get_text(" ", strip=True)).strip()
+                published = self._parse_mmddyyyy(row_text)
+            else:
+                card_text = re.sub(r"\s+", " ", link.parent.get_text(" ", strip=True) if link.parent else "").strip()
+                published = self._parse_mmddyyyy(card_text)
+                if published is None:
+                    article = link.find_parent(["article", "li", "div"])
+                    article_text = re.sub(r"\s+", " ", article.get_text(" ", strip=True) if article else "").strip()
+                    published = self._parse_mmddyyyy(article_text)
 
             if published is not None and cutoff is not None and published < cutoff:
                 if index == 0:

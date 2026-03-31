@@ -92,6 +92,8 @@ export default function Dashboard() {
   const releaseArticles = [...(latestReport?.release_articles ?? [])].sort(
     (a, b) => new Date(b.published_date || b.scraped_date).getTime() - new Date(a.published_date || a.scraped_date).getTime(),
   );
+  const releaseWindowHours = latestReport?.release_recent_window_hours ?? 24;
+  const failedSources = latestReport?.release_failed_sources ?? [];
   const today = new Date();
   const subtitle = `${today.toLocaleDateString('en-US', { weekday: 'long' })}, ${today.toLocaleDateString('en-US', {
     month: 'long',
@@ -270,8 +272,30 @@ export default function Dashboard() {
           )}
 
           {view === 'new_releases' && (
-            <div>
-              <p className="text-sm text-[#888888]">Latest company releases discovered in the last 24 hours</p>
+            <div className="space-y-3">
+              <p className="text-sm text-[#888888]">Latest company releases discovered in the last {releaseWindowHours} hours</p>
+              <div>
+                <p className="text-xs uppercase tracking-[0.08em] text-[#555555]">Failed to check</p>
+                {failedSources.length === 0 ? (
+                  <p className="mt-1 text-sm text-[#555555]">No failed sources in this releases run.</p>
+                ) : (
+                  <ul className="mt-2 space-y-1 text-sm text-[#fca5a5]">
+                    {failedSources.map((item) => (
+                      <li key={`${item.source_url}-${item.reason || 'unknown'}`}>
+                        <a
+                          href={item.source_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[#fca5a5] underline decoration-[#7f1d1d] underline-offset-2 hover:text-[#fecaca]"
+                        >
+                          {item.company_name}
+                        </a>{' '}
+                        <span className="text-[#fca5a5]/80">({item.reason || 'failed'})</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -292,7 +316,7 @@ export default function Dashboard() {
       {!loading && !error && view === 'new_releases' && releaseArticles.length === 0 && (
         <div className="empty-state">
           <div className="empty-state-icon" />
-          <p>No fresh releases found in the last 24h. Add more source pages in Settings.</p>
+          <p>No fresh releases found in the last {releaseWindowHours}h. Add more source pages in Settings.</p>
         </div>
       )}
     </section>

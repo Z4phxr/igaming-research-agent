@@ -30,6 +30,7 @@ from app.services.portal_scrapers.parsers.playtech_html import PlaytechHtmlParse
 from app.services.portal_scrapers.parsers.polymarket_prnewswire_html import PolymarketPrnewswireHtmlParser
 from app.services.portal_scrapers.parsers.pragmaticplay_html import PragmaticPlayHtmlParser
 from app.services.portal_scrapers.parsers.prizepicks_html import PrizePicksHtmlParser
+from app.services.portal_scrapers.parsers.rgc_html import RgcHtmlParser
 from app.services.portal_scrapers.parsers.rsi_html import RsiHtmlParser
 from app.services.portal_scrapers.parsers.scientificgames_html import ScientificGamesHtmlParser
 from app.services.portal_scrapers.parsers.sportradar_html import SportradarHtmlParser
@@ -301,4 +302,4 @@ def test_registry_resolves_config_driven_parser_for_sba_source():
 
 def test_registry_resolves_config_driven_parser_for_rgc_source_by_company_name():
     parser = resolve_listing_parser("https://www.responsiblegambling.org/news", "Responsible Gambling Council")
-    assert isinstance(parser, ConfigDrivenHtmlParser)
+    assert isinstance(parser, RgcHtmlParser)

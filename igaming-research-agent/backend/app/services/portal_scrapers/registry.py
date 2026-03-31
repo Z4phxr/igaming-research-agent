@@ -31,6 +31,7 @@ from app.services.portal_scrapers.parsers.polymarket_prnewswire_html import Poly
 from app.services.portal_scrapers.parsers.pragmaticplay_html import PragmaticPlayHtmlParser
 from app.services.portal_scrapers.parsers.prizepicks_html import PrizePicksHtmlParser
 from app.services.portal_scrapers.parsers.rsi_html import RsiHtmlParser
+from app.services.portal_scrapers.parsers.rgc_html import RgcHtmlParser
 from app.services.portal_scrapers.parsers.bally_html import BallyHtmlParser
 from app.services.portal_scrapers.parsers.lnw_html import LnwHtmlParser
 from app.services.portal_scrapers.parsers.scientificgames_html import ScientificGamesHtmlParser
@@ -59,6 +60,7 @@ _PARSERS: list[PortalListingParser] = [
     IllinoisIgbHtmlParser(),
     KalshiHtmlParser(),
     PennHtmlParser(),
+    RgcHtmlParser(),
     RsiHtmlParser(),
     BallyHtmlParser(),
     BraggHtmlParser(),
@@ -93,7 +95,11 @@ _CONFIG_DRIVEN_CONFIGS: list[HtmlListingParserConfig] = [
         name="pennsylvania-gaming-control-board",
         source_url_contains=("gamingcontrolboard.pa.gov/news-and-transparency/press-release",),
         company_name_contains=("pennsylvania gaming control board",),
-        item_selector="a[href*='/news-and-transparency/press-release/']",
+        item_selector="div.press-release-block, a[href*='/news-and-transparency/press-release/']",
+        link_selector="div.press-release-readmore a[href]",
+        title_selector="div.press-release-title",
+        date_selector="div.press-release-date",
+        date_formats=("%m-%d-%Y",),
         link_href_excludes=("?page=", "#"),
         empty_reason_no_items="no_pa_press_release_links",
     ),

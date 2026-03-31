@@ -296,6 +296,7 @@ export default function Settings() {
         scheduler_hour: pipelineSettings.scheduler_hour,
         scheduler_minute: pipelineSettings.scheduler_minute,
         scheduler_timezone: pipelineSettings.scheduler_timezone,
+        release_recent_window_hours: pipelineSettings.release_recent_window_hours,
       });
       setPipelineSettings(updated);
       alert('Pipeline schedule updated. Note: changes take effect after app restart.');
@@ -1133,11 +1134,33 @@ export default function Settings() {
             <p className="mt-1 text-xs text-[#888888]">e.g., UTC, America/New_York, Europe/London</p>
           </div>
 
+          <div>
+            <label htmlFor="releaseRecentWindowHours" className="mb-1 block text-[12px] uppercase tracking-[0.05em] text-[#888888]">
+              Release Window (hours)
+            </label>
+            <input
+              id="releaseRecentWindowHours"
+              type="number"
+              min="1"
+              max="720"
+              value={pipelineSettings.release_recent_window_hours}
+              onChange={(e) =>
+                setPipelineSettings({
+                  ...pipelineSettings,
+                  release_recent_window_hours: Math.max(1, Math.min(720, parseInt(e.target.value) || 72)),
+                })
+              }
+              className="w-full rounded-md border border-[#333333] bg-[#0a0a0a] px-3.5 py-2.5 text-sm text-white outline-none transition-colors focus:border-[#2563eb]"
+            />
+            <p className="mt-1 text-xs text-[#888888]">Controls how far back release scan looks (1-720h)</p>
+          </div>
+
           <div className="rounded-lg border border-[#1f2937] bg-[#10141f] p-3">
             <p className="text-sm text-[#cbd5e1]">
               <strong>Current schedule:</strong> {pipelineSettings.scheduler_hour.toString().padStart(2, '0')}:
               {pipelineSettings.scheduler_minute.toString().padStart(2, '0')} {pipelineSettings.scheduler_timezone}
             </p>
+            <p className="mt-1 text-sm text-[#cbd5e1]"><strong>Release window:</strong> last {pipelineSettings.release_recent_window_hours} hours</p>
           </div>
 
           <button

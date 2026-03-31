@@ -30,6 +30,7 @@ from app.services.portal_scrapers.parsers.polymarket_prnewswire_html import Poly
 from app.services.portal_scrapers.parsers.pragmaticplay_html import PragmaticPlayHtmlParser
 from app.services.portal_scrapers.parsers.prizepicks_html import PrizePicksHtmlParser
 from app.services.portal_scrapers.parsers.rsi_html import RsiHtmlParser
+from app.services.portal_scrapers.parsers.rgc_html import RgcHtmlParser
 from app.services.portal_scrapers.parsers.scientificgames_html import ScientificGamesHtmlParser
 from app.services.portal_scrapers.parsers.sportradar_html import SportradarHtmlParser
 from app.services.portal_scrapers.parsers.underdog_html import UnderdogHtmlParser
@@ -67,6 +68,7 @@ __all__ = [
 	"PragmaticPlayHtmlParser",
 	"PrizePicksHtmlParser",
 	"RsiHtmlParser",
+	"RgcHtmlParser",
 	"ScientificGamesHtmlParser",
 	"SportradarHtmlParser",
 	"UnderdogHtmlParser",

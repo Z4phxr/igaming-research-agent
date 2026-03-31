@@ -14,6 +14,7 @@ class Settings(BaseSettings):
 
     scheduler_hour: int = 7
     scheduler_minute: int = 0
+    scheduler_timezone: str = "UTC"
 
     serper_api_key: str = ""
     anthropic_api_key: str = ""

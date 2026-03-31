@@ -32,6 +32,45 @@ def test_pa_config_extracts_press_release_links():
     ]
 
 
+def test_pa_config_uses_press_release_title_and_date_from_block():
+    parser = resolve_listing_parser(
+        "https://gamingcontrolboard.pa.gov/news-and-transparency/press-release",
+        "Pennsylvania Gaming Control Board",
+    )
+    assert parser is not None
+
+    html = """
+    <div aria-label="Press Release Container" class="container press-release-container">
+      <div class="row-fluid press-release-block">
+        <div class="row-fluid press-release-date">03-25-2026</div>
+        <div class="row-fluid press-release-title">PA Gaming Control Board Fines BetMGM $100,000</div>
+        <div class="row-fluid">
+          <div class="press-release-readmore">
+            <a href="/news-and-transparency/press-release/pa-gaming-control-board-fines-betmgm-100000" hreflang="en">
+              READ THE COMPLETE PRESS RELEASE HERE
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+    """
+
+    result = parser.parse_listing(
+        listing_html=html,
+        source_url="https://gamingcontrolboard.pa.gov/news-and-transparency/press-release",
+        company_name="Pennsylvania Gaming Control Board",
+        cutoff=datetime.datetime(2026, 3, 1),
+        now_utc=datetime.datetime(2026, 3, 29),
+    )
+
+    assert result.empty_reason is None
+    assert result.candidate_urls == [
+        "https://gamingcontrolboard.pa.gov/news-and-transparency/press-release/pa-gaming-control-board-fines-betmgm-100000"
+    ]
+    assert result.candidate_titles[result.candidate_urls[0]] == "PA Gaming Control Board Fines BetMGM $100,000"
+    assert result.candidate_published_dates[result.candidate_urls[0]] == datetime.datetime(2026, 3, 25)
+
+
 def test_nj_dge_config_extracts_press_release_pdfs_from_table_rows():
     parser = resolve_listing_parser(
         "https://www.njoag.gov/about/divisions-and-offices/division-of-gaming-enforcement-home/news-and-updates/",

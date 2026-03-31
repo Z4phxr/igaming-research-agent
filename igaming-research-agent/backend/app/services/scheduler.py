@@ -14,8 +14,10 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import SessionLocal
 from app.models import Article, Report
+from app.models import PipelineSettings as PipelineSettingsModel
 from app.services.analyzer import infer_published_date_with_llm, run_analysis_pipeline
 from app.services.release_discovery import discover_recent_releases
 from app.services.report_generator import generate_briefing
@@ -545,14 +547,29 @@ def run_release_pipeline(db: Session | None = None, raise_on_error: bool = False
     try:
         logger.info("Release pipeline started")
         pipeline_now = datetime.datetime.utcnow()
+        configured_window_hours = int(getattr(settings, "release_recent_window_hours", 72) or 72)
 
-        release_articles = discover_recent_releases(session, now_utc=pipeline_now)
+        pipeline_settings = session.query(PipelineSettingsModel).first()
+        if pipeline_settings is not None:
+            configured_window_hours = int(
+                getattr(pipeline_settings, "release_recent_window_hours", configured_window_hours) or configured_window_hours
+            )
+        configured_window_hours = max(1, configured_window_hours)
+
+        failed_sources: list[dict] = []
+
+        release_articles = discover_recent_releases(
+            session,
+            now_utc=pipeline_now,
+            window_hours=configured_window_hours,
+            failed_sources=failed_sources,
+        )
         logger.info("Release pipeline discovery complete: count=%s", len(release_articles))
 
         persisted_articles = _persist_articles(session, release_articles)
 
         report = _get_or_create_daily_report(session, report_date=datetime.date.today())
-        report.releases_pipeline_ran_at = datetime.datetime.utcnow()
+        report.releases_pipeline_ran_at = pipeline_now
         report.generated_at = datetime.datetime.utcnow()
         _attach_report_articles(report, persisted_articles)
 
@@ -561,6 +578,9 @@ def run_release_pipeline(db: Session | None = None, raise_on_error: bool = False
         return {
             "releases_found": len(release_articles),
             "releases_saved": len(persisted_articles),
+            "failed_sources": failed_sources,
+            "failed_sources_count": len(failed_sources),
+            "release_recent_window_hours": configured_window_hours,
             "report_id": report.id,
         }
     except Exception as exc:

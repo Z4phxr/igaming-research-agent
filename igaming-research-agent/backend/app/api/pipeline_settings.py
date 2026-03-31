@@ -22,8 +22,13 @@ def _ensure_settings_exist(db: Session) -> PipelineSettingsModel:
             scheduler_hour=7,
             scheduler_minute=0,
             scheduler_timezone="UTC",
+            release_recent_window_hours=72,
         )
         db.add(settings)
+        db.commit()
+        db.refresh(settings)
+    elif int(getattr(settings, "release_recent_window_hours", 0) or 0) < 1:
+        settings.release_recent_window_hours = 72
         db.commit()
         db.refresh(settings)
     return settings
@@ -55,7 +60,11 @@ def update_pipeline_settings(
 
     logger = logging.getLogger(__name__)
     logger.info(
-        f"Pipeline settings updated: {settings.scheduler_hour:02d}:{settings.scheduler_minute:02d} {settings.scheduler_timezone}"
+        "Pipeline settings updated: %02d:%02d %s release_window=%sh",
+        settings.scheduler_hour,
+        settings.scheduler_minute,
+        settings.scheduler_timezone,
+        settings.release_recent_window_hours,
     )
 
     # TODO: Restart scheduler gracefully with new time

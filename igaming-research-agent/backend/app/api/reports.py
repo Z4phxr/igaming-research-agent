@@ -9,9 +9,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session, selectinload
 
+from app.config import settings
 from app.database import get_db
 from app.models import Article as ArticleModel
 from app.models import ArticleFeedback as ArticleFeedbackModel
+from app.models import PipelineSettings as PipelineSettingsModel
+from app.models import ReleaseSource as ReleaseSourceModel
 from app.models import Report as ReportModel
 from app.schemas import ArticleFeedbackCreate, PipelineReevaluateOut, ReportSummaryOut
 from app.services.analyzer import build_rejection_metadata, run_analysis_pipeline
@@ -20,6 +23,37 @@ from app.services.scheduler import run_articles_pipeline, run_daily_pipeline, ru
 
 router = APIRouter()
 feedback_router = APIRouter()
+
+
+def _effective_release_window_hours(db: Session) -> int:
+    row = db.query(PipelineSettingsModel).first()
+    if row is None:
+        return int(getattr(settings, "release_recent_window_hours", 72) or 72)
+    return int(getattr(row, "release_recent_window_hours", 72) or 72)
+
+
+def _failed_sources_for_report(report: ReportModel, db: Session) -> list[dict]:
+    run_at = getattr(report, "releases_pipeline_ran_at", None)
+    if run_at is None:
+        return []
+
+    rows = (
+        db.query(ReleaseSourceModel)
+        .filter(ReleaseSourceModel.last_listing_checked_at == run_at)
+        .filter(ReleaseSourceModel.last_failure_reason.isnot(None))
+        .order_by(ReleaseSourceModel.company_name.asc())
+        .all()
+    )
+
+    return [
+        {
+            "company_name": row.company_name,
+            "source_url": row.source_url,
+            "reason": row.last_failure_reason,
+            "checked_at": row.last_listing_checked_at,
+        }
+        for row in rows
+    ]
 
 
 def _serialize_report(report: ReportModel, show_all: bool, show_all_info: bool, db: Session) -> dict:
@@ -79,6 +113,8 @@ def _serialize_report(report: ReportModel, show_all: bool, show_all_info: bool, 
         "generated_at": report.generated_at,
         "articles": [_serialize_article(article) for article in filtered_articles],
         "release_articles": [_serialize_article(article) for article in release_articles],
+        "release_recent_window_hours": _effective_release_window_hours(db),
+        "release_failed_sources": _failed_sources_for_report(report, db),
     }
 
 
@@ -288,17 +324,23 @@ def run_releases_only_pipeline(db: Session = Depends(get_db)):
         )
 
     releases_found = int(result.get("releases_found", 0) or 0)
+    failed_sources_count = int(result.get("failed_sources_count", 0) or 0)
+    release_window_hours = int(result.get("release_recent_window_hours", 72) or 72)
     if releases_found == 0:
         return {
             "status": "success",
             "message": "Releases pipeline ran but found no releases",
             "releases_found": 0,
+            "failed_sources_count": failed_sources_count,
+            "release_recent_window_hours": release_window_hours,
         }
 
     return {
         "status": "success",
         "message": "Releases pipeline completed",
         "releases_found": releases_found,
+        "failed_sources_count": failed_sources_count,
+        "release_recent_window_hours": release_window_hours,
     }
 
 

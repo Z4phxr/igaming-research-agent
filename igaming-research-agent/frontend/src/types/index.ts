@@ -31,6 +31,13 @@ export interface Article {
   rejection_llm_why?: string | null;
 }
 
+export interface ReleaseFailedSource {
+  company_name: string;
+  source_url: string;
+  reason: string | null;
+  checked_at: string | null;
+}
+
 export interface Report {
   id: number;
   report_date: string;
@@ -43,6 +50,8 @@ export interface Report {
   briefing_generated_at?: string | null;
   articles: Article[];
   release_articles?: Article[];
+  release_recent_window_hours?: number;
+  release_failed_sources?: ReleaseFailedSource[];
 }
 
 export interface ReleaseSource {

@@ -323,6 +323,7 @@ def init_db() -> None:
     ensure_article_runtime_columns()
     ensure_report_runtime_columns()
     ensure_release_source_runtime_columns()
+    ensure_pipeline_settings_runtime_columns()
     ensure_app_migrations_table()
     ensure_prompt_templates_seeded()
 
@@ -450,6 +451,28 @@ def ensure_release_source_runtime_columns() -> None:
         connection.execute(text("UPDATE release_sources SET health_score = 100 WHERE health_score IS NULL OR health_score < 0"))
         connection.execute(text("UPDATE release_sources SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"))
         connection.execute(text("UPDATE release_sources SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL"))
+
+
+def ensure_pipeline_settings_runtime_columns() -> None:
+    """Backfill PipelineSettings columns for existing databases without migrations."""
+    inspector = inspect(engine)
+    if "pipeline_settings" not in inspector.get_table_names():
+        return
+
+    existing_columns = {column["name"] for column in inspector.get_columns("pipeline_settings")}
+    statements: list[str] = []
+    if "release_recent_window_hours" not in existing_columns:
+        statements.append("ALTER TABLE pipeline_settings ADD COLUMN release_recent_window_hours INTEGER NOT NULL DEFAULT 72")
+
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+        connection.execute(
+            text(
+                "UPDATE pipeline_settings SET release_recent_window_hours = 72 "
+                "WHERE release_recent_window_hours IS NULL OR release_recent_window_hours < 1"
+            )
+        )
 
 
 def ensure_app_migrations_table() -> None:

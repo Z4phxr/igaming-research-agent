@@ -68,6 +68,36 @@ def _new_source_stats(source: ReleaseSource) -> dict:
     }
 
 
+def _append_failed_source(
+    failed_sources: list[dict] | None,
+    source: ReleaseSource,
+    reason: str,
+    stage: str,
+    status_code: int | None,
+    checked_at: datetime.datetime,
+) -> None:
+    if failed_sources is None:
+        return
+
+    source_url = str(source.source_url or "").strip()
+    if not source_url:
+        return
+
+    if any(str(item.get("source_url") or "").strip() == source_url for item in failed_sources):
+        return
+
+    failed_sources.append(
+        {
+            "company_name": source.company_name,
+            "source_url": source_url,
+            "reason": reason,
+            "stage": stage,
+            "http_status": status_code,
+            "checked_at": checked_at,
+        }
+    )
+
+
 def _increment_failure_reason(stats: dict, reason: str) -> None:
     failed_by_reason = stats["failed_by_reason"]
     failed_by_reason[reason] = int(failed_by_reason.get(reason, 0)) + 1
@@ -573,10 +603,17 @@ def _log_source_summary(stats: dict) -> None:
     )
 
 
-def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = None) -> list[dict]:
+def discover_recent_releases(
+    db: Session,
+    now_utc: datetime.datetime | None = None,
+    window_hours: int | None = None,
+    failed_sources: list[dict] | None = None,
+) -> list[dict]:
     """Scan configured source pages and return releases within configured recent window."""
     now = now_utc or datetime.datetime.utcnow()
-    cutoff = now - datetime.timedelta(hours=settings.release_recent_window_hours)
+    effective_window_hours = int(window_hours or settings.release_recent_window_hours)
+    effective_window_hours = max(1, effective_window_hours)
+    cutoff = now - datetime.timedelta(hours=effective_window_hours)
 
     active_sources = (
         db.query(ReleaseSource)
@@ -608,6 +645,14 @@ def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = No
             source_stats["listing_failed"] = 1
             source_stats["listing_failure_reason"] = "quarantined"
             _increment_failure_reason(source_stats, "quarantined")
+            _append_failed_source(
+                failed_sources=failed_sources,
+                source=source,
+                reason="quarantined",
+                stage="listing",
+                status_code=None,
+                checked_at=source_now,
+            )
             _mark_source_failure(source, "quarantined", source_now)
             db.add(source)
             db.commit()
@@ -633,6 +678,14 @@ def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = No
             source_stats["listing_failed"] = 1
             source_stats["listing_failure_reason"] = guard_reason
             _increment_failure_reason(source_stats, guard_reason)
+            _append_failed_source(
+                failed_sources=failed_sources,
+                source=source,
+                reason=guard_reason,
+                stage="listing",
+                status_code=None,
+                checked_at=source_now,
+            )
             _mark_source_failure(source, guard_reason, source_now)
             db.add(source)
             db.commit()
@@ -661,6 +714,14 @@ def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = No
             source.last_listing_checked_at = source_now
             if not feed_text:
                 reason = str(feed_meta["error_kind"])
+                _append_failed_source(
+                    failed_sources=failed_sources,
+                    source=source,
+                    reason=reason,
+                    stage="feed",
+                    status_code=feed_meta.get("status_code"),
+                    checked_at=source_now,
+                )
                 _mark_source_failure(source, reason, source_now)
                 db.add(source)
                 db.commit()
@@ -753,6 +814,14 @@ def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = No
             source_stats["listing_failed"] = 1
             source_stats["listing_failure_reason"] = listing_meta["error_kind"]
             _increment_failure_reason(source_stats, str(listing_meta["error_kind"]))
+            _append_failed_source(
+                failed_sources=failed_sources,
+                source=source,
+                reason=str(listing_meta["error_kind"]),
+                stage="listing",
+                status_code=listing_meta.get("status_code"),
+                checked_at=source_now,
+            )
             _mark_source_failure(source, str(listing_meta["error_kind"]), source_now)
             db.add(source)
             db.commit()
@@ -812,6 +881,36 @@ def discover_recent_releases(db: Session, now_utc: datetime.datetime | None = No
                 listing_empty_reason = parse_result.empty_reason
         else:
             listing_candidates = _extract_hrefs(listing_html)
+
+        if not listing_candidates and listing_empty_reason in {"bot_protection_blocked", "tls_certificate_error"}:
+            source_stats["listing_failed"] = 1
+            source_stats["listing_failure_reason"] = listing_empty_reason
+            _increment_failure_reason(source_stats, listing_empty_reason)
+            _append_failed_source(
+                failed_sources=failed_sources,
+                source=source,
+                reason=listing_empty_reason,
+                stage="listing_parse",
+                status_code=listing_meta.get("status_code"),
+                checked_at=source_now,
+            )
+            _mark_source_failure(source, listing_empty_reason, source_now)
+            db.add(source)
+            db.commit()
+            _log_page_result(
+                page_name=source.company_name,
+                page_url=source.source_url,
+                stage="listing",
+                result="fail",
+                scraped_relevant=0,
+                reason=listing_empty_reason,
+                http_status=listing_meta.get("status_code"),
+                duration_ms=int(listing_meta.get("duration_ms", 0)),
+                retries_used=int(listing_meta.get("retries_used", 0)),
+            )
+            run_sources_failed += 1
+            _log_source_summary(source_stats)
+            continue
 
         for href in listing_candidates:
             if not _is_valid_candidate_href(href):
