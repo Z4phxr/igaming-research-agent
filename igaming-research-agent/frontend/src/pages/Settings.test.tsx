@@ -47,6 +47,13 @@ describe('Settings', () => {
       history: [],
     } as any);
     vi.spyOn(apiService, 'getPromptHistory').mockResolvedValue([] as any);
+    vi.spyOn(apiService, 'getPipelineSettings').mockResolvedValue({
+      id: 1,
+      scheduler_hour: 7,
+      scheduler_minute: 0,
+      scheduler_timezone: 'UTC',
+      updated_at: '2026-03-22T00:00:00Z',
+    } as any);
     vi.spyOn(apiService, 'updatePromptDraft').mockResolvedValue({} as any);
     vi.spyOn(apiService, 'publishPrompt').mockResolvedValue({} as any);
     vi.spyOn(apiService, 'createReleaseSource').mockResolvedValue({} as any);
@@ -106,4 +113,5 @@ describe('Settings', () => {
       expect(screen.queryByText(/initial term/i)).not.toBeInTheDocument();
     });
   });
+
 });

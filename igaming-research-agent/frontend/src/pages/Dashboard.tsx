@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import ArticleCard from '@/components/ArticleCard';
-import { getLatestReport } from '@/services/api';
+import {
+  getLatestReport,
+  runArticlesPipeline,
+  runPipeline,
+  runReevaluateTopStories,
+  runReleasesPipeline,
+} from '@/services/api';
 import type { Report } from '@/types';
 
 type DashboardView = 'top_stories' | 'new_releases';
@@ -13,6 +19,9 @@ export default function Dashboard() {
   const [showAllInfo, setShowAllInfo] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [runningAction, setRunningAction] = useState<'all' | 'articles' | 'releases' | 'reevaluate' | null>(null);
+  const [actionMessage, setActionMessage] = useState('');
+  const [actionError, setActionError] = useState('');
 
   const readShowAllInfoSetting = (): boolean => {
     if (typeof window === 'undefined') {
@@ -57,6 +66,40 @@ export default function Dashboard() {
 
     void load();
   }, [showAllArticles, showAllInfo]);
+
+  const refreshLatestReport = async () => {
+    const report = await getLatestReport(showAllArticles, showAllInfo);
+    setLatestReport(report);
+  };
+
+  const handleRunPipelineAction = async (action: 'all' | 'articles' | 'releases' | 'reevaluate') => {
+    setRunningAction(action);
+    setActionError('');
+    setActionMessage('');
+    try {
+      let message = '';
+      if (action === 'all') {
+        const result = await runPipeline();
+        message = result.message;
+      } else if (action === 'articles') {
+        const result = await runArticlesPipeline();
+        message = result.message;
+      } else if (action === 'releases') {
+        const result = await runReleasesPipeline();
+        message = result.message;
+      } else {
+        const result = await runReevaluateTopStories();
+        message = result.message;
+      }
+
+      setActionMessage(message);
+      await refreshLatestReport();
+    } catch (runError) {
+      setActionError(runError instanceof Error ? runError.message : 'Unable to run selected pipeline action.');
+    } finally {
+      setRunningAction(null);
+    }
+  };
 
   const articles = [...(latestReport?.articles ?? [])].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
   const releaseArticles = [...(latestReport?.release_articles ?? [])].sort(
@@ -103,12 +146,46 @@ export default function Dashboard() {
               <p className="mt-2 font-mono text-2xl text-[#2563eb]">{latestReport.total_articles_kept ?? 0}</p>
             </div>
             <div className="rounded-lg border border-[#222222] bg-[#111111] p-4">
-              <p className="text-xs uppercase tracking-[0.08em] text-[#555555]">Pipeline Run</p>
-              <p className="mt-2 font-mono text-2xl text-[#2563eb]">
-                {new Date(latestReport.generated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </p>
+              <p className="text-xs uppercase tracking-[0.08em] text-[#555555]">Pipeline Actions</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleRunPipelineAction('all')}
+                  disabled={runningAction !== null}
+                  className="rounded border border-[#2563eb] bg-[#1d4ed8] px-2 py-1.5 text-xs font-medium text-white hover:bg-[#1e40af] disabled:opacity-50"
+                >
+                  {runningAction === 'all' ? 'Running...' : 'Run All'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleRunPipelineAction('articles')}
+                  disabled={runningAction !== null}
+                  className="rounded border border-[#2563eb] bg-[#1d4ed8] px-2 py-1.5 text-xs font-medium text-white hover:bg-[#1e40af] disabled:opacity-50"
+                >
+                  {runningAction === 'articles' ? 'Running...' : 'Run Articles'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleRunPipelineAction('releases')}
+                  disabled={runningAction !== null}
+                  className="rounded border border-[#15803d] bg-[#16a34a] px-2 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:opacity-50"
+                >
+                  {runningAction === 'releases' ? 'Running...' : 'Run Releases'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleRunPipelineAction('reevaluate')}
+                  disabled={runningAction !== null}
+                  className="rounded border border-[#a16207] bg-[#ca8a04] px-2 py-1.5 text-xs font-medium text-black hover:bg-[#a16207] disabled:opacity-50"
+                >
+                  {runningAction === 'reevaluate' ? 'Running...' : 'Re-evaluate'}
+                </button>
+              </div>
             </div>
           </div>
+
+          {actionMessage && <p className="text-sm text-[#16a34a]">{actionMessage}</p>}
+          {actionError && <p className="text-sm text-[#dc2626]">{actionError}</p>}
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="inline-flex items-center rounded-full border border-[#333333] bg-[#0f0f0f] p-1">

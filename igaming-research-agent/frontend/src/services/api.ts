@@ -351,6 +351,15 @@ export interface PipelineSettings {
   updated_at: string;
 }
 
+export interface PipelineReevaluateResult {
+  status: string;
+  message: string;
+  report_id: number;
+  processed_articles: number;
+  updated_articles: number;
+  kept_articles: number;
+}
+
 export async function getPipelineSettings(): Promise<PipelineSettings> {
   try {
     const { data } = await api.get<PipelineSettings>('/pipeline-settings');
@@ -370,5 +379,14 @@ export async function updatePipelineSettings(settings: {
     return data;
   } catch (error) {
     throw new Error(getApiErrorMessage(error, 'Failed to update pipeline settings.'));
+  }
+}
+
+export async function runReevaluateTopStories(): Promise<PipelineReevaluateResult> {
+  try {
+    const { data } = await api.post<PipelineReevaluateResult>('/reports/run/reevaluate', {}, { timeout: 300000 });
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to re-evaluate Top Stories.'));
   }
 }

@@ -177,3 +177,12 @@ class PipelineSettingsOut(PipelineSettingsUpdate):
     updated_at: datetime.datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class PipelineReevaluateOut(BaseModel):
+    status: str
+    message: str
+    report_id: int
+    processed_articles: int
+    updated_articles: int
+    kept_articles: int

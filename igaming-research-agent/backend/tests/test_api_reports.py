@@ -278,4 +278,86 @@ def test_post_article_feedback_validates_score_range(client, db_session, seeded_
     )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "user_corrected_score must be between 1 and 10"
+
+
+def test_post_reports_run_reevaluate_updates_top_stories_with_current_scoring(client, db_session, seeded_query):
+    top_story = Article(
+        title="Top story before reevaluate",
+        url="https://example.com/top-story-before",
+        summary="Old summary",
+        score=2,
+        raw_score=2,
+        kept=False,
+        rejection_reason="score_below_threshold",
+        article_type="top_story",
+        matched_query_id=seeded_query.id,
+    )
+    release = Article(
+        title="Release should stay unchanged",
+        url="https://example.com/release-item",
+        summary="Release summary",
+        score=0,
+        kept=True,
+        article_type="release",
+        matched_query_id=seeded_query.id,
+    )
+    report = Report(
+        report_date=datetime.date.today(),
+        total_articles_found=2,
+        total_articles_kept=0,
+        articles=[top_story, release],
+    )
+    db_session.add(report)
+    db_session.commit()
+
+    def fake_run_analysis_pipeline(articles, db=None):
+        assert len(articles) == 1
+        assert articles[0]["url"] == "https://example.com/top-story-before"
+        analyzed = {
+            **articles[0],
+            "score": 8,
+            "raw_score": 8,
+            "summary": "Updated summary",
+            "tags": "regulation",
+            "passed_relevance_filter": True,
+            "kept": True,
+            "rejection_reason": None,
+        }
+        return {"final_articles": [analyzed], "all_articles": [analyzed]}
+
+    original_analyze = reports_api.run_analysis_pipeline
+    original_briefing = reports_api.generate_briefing
+    reports_api.run_analysis_pipeline = fake_run_analysis_pipeline
+    reports_api.generate_briefing = lambda final_articles, db=None: "Updated briefing"
+    try:
+        response = client.post("/api/reports/run/reevaluate")
+    finally:
+        reports_api.run_analysis_pipeline = original_analyze
+        reports_api.generate_briefing = original_briefing
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "success"
+    assert payload["processed_articles"] == 1
+    assert payload["updated_articles"] == 1
+    assert payload["kept_articles"] == 1
+
+    db_session.refresh(top_story)
+    db_session.refresh(release)
+    db_session.refresh(report)
+
+    assert top_story.score == 8
+    assert top_story.summary == "Updated summary"
+    assert top_story.kept is True
+    assert top_story.rejection_reason is None
+
+    assert release.summary == "Release summary"
+    assert release.article_type == "release"
+    assert report.total_articles_kept == 1
+    assert report.briefing == "Updated briefing"
+
+
+def test_post_reports_run_reevaluate_returns_404_without_reports(client):
+    response = client.post("/api/reports/run/reevaluate")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "No reports found"

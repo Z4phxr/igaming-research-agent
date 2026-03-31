@@ -3,6 +3,8 @@
 TODO: Add endpoint for report by specific date.
 """
 
+import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session, selectinload
@@ -11,8 +13,9 @@ from app.database import get_db
 from app.models import Article as ArticleModel
 from app.models import ArticleFeedback as ArticleFeedbackModel
 from app.models import Report as ReportModel
-from app.schemas import ArticleFeedbackCreate, ReportSummaryOut
-from app.services.analyzer import build_rejection_metadata
+from app.schemas import ArticleFeedbackCreate, PipelineReevaluateOut, ReportSummaryOut
+from app.services.analyzer import build_rejection_metadata, run_analysis_pipeline
+from app.services.report_generator import generate_briefing
 from app.services.scheduler import run_articles_pipeline, run_daily_pipeline, run_release_pipeline
 
 router = APIRouter()
@@ -84,6 +87,98 @@ def list_reports(db: Session = Depends(get_db)):
         .order_by(ReportModel.report_date.desc())
         .all()
     )
+
+
+def _reevaluate_latest_top_stories(db: Session) -> dict:
+    report = (
+        db.query(ReportModel)
+        .options(selectinload(ReportModel.articles))
+        .order_by(ReportModel.report_date.desc(), ReportModel.id.desc())
+        .first()
+    )
+    if report is None:
+        raise HTTPException(status_code=404, detail="No reports found")
+
+    top_story_articles = [
+        article
+        for article in report.articles
+        if getattr(article, "article_type", "top_story") != "release"
+    ]
+    if not top_story_articles:
+        return {
+            "status": "success",
+            "message": "No Top Stories to reevaluate in latest report",
+            "report_id": report.id,
+            "processed_articles": 0,
+            "updated_articles": 0,
+            "kept_articles": 0,
+        }
+
+    analysis_input = [
+        {
+            "title": article.title,
+            "url": article.url,
+            "snippet": article.summary or "",
+            "summary": article.summary or "",
+            "full_text": article.full_text or "",
+            "source_domain": article.source_domain or "",
+            "published_date": article.published_date,
+            "matched_query_id": article.matched_query_id,
+        }
+        for article in top_story_articles
+    ]
+
+    analysis_result = run_analysis_pipeline(analysis_input, db=db)
+    all_articles = analysis_result.get("all_articles", [])
+    article_by_url = {
+        str(item.get("url") or ""): item
+        for item in all_articles
+        if str(item.get("url") or "")
+    }
+
+    updated_count = 0
+    for article in top_story_articles:
+        analyzed = article_by_url.get(article.url)
+        if analyzed is None:
+            continue
+
+        article.score = int(analyzed.get("score", article.score or 0) or 0)
+        article.raw_score = int(analyzed.get("raw_score", analyzed.get("score", article.raw_score or 0)) or 0)
+        article.passed_relevance_filter = bool(analyzed.get("passed_relevance_filter", article.passed_relevance_filter))
+        article.kept = bool(analyzed.get("kept", article.kept))
+        article.rejection_reason = analyzed.get("rejection_reason")
+
+        if analyzed.get("summary") is not None:
+            article.summary = str(analyzed.get("summary") or "")
+        if analyzed.get("tags") is not None:
+            article.tags = str(analyzed.get("tags") or "")
+
+        updated_count += 1
+
+    kept_articles = sum(1 for article in top_story_articles if bool(article.kept))
+    report.total_articles_kept = kept_articles
+    now_utc = datetime.datetime.utcnow()
+    report.generated_at = now_utc
+
+    final_articles = analysis_result.get("final_articles", [])
+    briefing_text = generate_briefing(final_articles, db=db)
+    if briefing_text is None:
+        report.briefing = ""
+        report.briefing_generated_at = None
+    else:
+        report.briefing = briefing_text
+        report.briefing_generated_at = now_utc
+
+    db.commit()
+
+    return {
+        "status": "success",
+        "message": "Top Stories re-evaluated using current published prompts",
+        "report_id": report.id,
+        "processed_articles": len(top_story_articles),
+        "updated_articles": updated_count,
+        "kept_articles": kept_articles,
+    }
 
 
 @router.post("/run")
@@ -181,6 +276,11 @@ def run_releases_only_pipeline(db: Session = Depends(get_db)):
         "message": "Releases pipeline completed",
         "releases_found": releases_found,
     }
+
+
+@router.post("/run/reevaluate", response_model=PipelineReevaluateOut)
+def run_top_stories_reevaluation(db: Session = Depends(get_db)):
+    return _reevaluate_latest_top_stories(db)
 
 
 @router.get("/latest")

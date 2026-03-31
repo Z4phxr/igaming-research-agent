@@ -1134,20 +1134,22 @@ export default function Settings() {
               When enabled, dashboard rejected cards request extra LLM "why failed" details. This increases API cost.
             </p>
           </div>
-          <button
-            type="button"
-            aria-label="toggle-show-all-info"
-            onClick={() => handleToggleShowAllInfo(!showAllInfo)}
-            className={`h-6 w-11 rounded-full border p-0.5 transition-colors ${
-              showAllInfo ? 'border-[#f59e0b] bg-[#f59e0b]' : 'border-[#333333] bg-[#1a1a1a]'
-            }`}
-          >
-            <span
-              className={`block h-4 w-4 rounded-full bg-white transition-transform ${
-                showAllInfo ? 'translate-x-5' : 'translate-x-0'
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              aria-label="toggle-show-all-info"
+              onClick={() => handleToggleShowAllInfo(!showAllInfo)}
+              className={`h-6 w-11 rounded-full border p-0.5 transition-colors ${
+                showAllInfo ? 'border-[#f59e0b] bg-[#f59e0b]' : 'border-[#333333] bg-[#1a1a1a]'
               }`}
-            />
-          </button>
+            >
+              <span
+                className={`block h-4 w-4 rounded-full bg-white transition-transform ${
+                  showAllInfo ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
         </div>
       </div>
 
