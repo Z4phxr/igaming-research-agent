@@ -11,6 +11,7 @@ from app.services.portal_scrapers.parsers.bet365_html import Bet365HtmlParser
 from app.services.portal_scrapers.parsers.caesars_html import CaesarsHtmlParser
 from app.services.portal_scrapers.parsers.catenamedia_html import CatenaMediaHtmlParser
 from app.services.portal_scrapers.parsers.config_driven_html import ConfigDrivenHtmlParser, HtmlListingParserConfig
+from app.services.portal_scrapers.parsers.draftkings_html import DraftKingsHtmlParser
 from app.services.portal_scrapers.parsers.evolution_html import EvolutionHtmlParser
 from app.services.portal_scrapers.parsers.fanduel_html import FanDuelHtmlParser
 from app.services.portal_scrapers.parsers.fanatics_html import FanaticsHtmlParser
@@ -47,6 +48,7 @@ _PARSERS: list[PortalListingParser] = [
     BetMgmHtmlParser(),
     CaesarsHtmlParser(),
     CatenaMediaHtmlParser(),
+    DraftKingsHtmlParser(),
     EvolutionHtmlParser(),
     FanDuelHtmlParser(),
     FanaticsHtmlParser(),

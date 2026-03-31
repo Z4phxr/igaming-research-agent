@@ -151,6 +151,74 @@ def test_fetch_html_uses_jina_fallback_for_catenamedia_listing_403(monkeypatch):
     ]
 
 
+def test_fetch_html_uses_jina_fallback_for_bet365_listing_403(monkeypatch):
+    calls: list[str] = []
+
+    def fake_get(url, *args, **kwargs):
+        calls.append(url)
+        if url == "https://news.bet365.com/en-us/sport/more-sports-and-news/2022102012405478121":
+            return _FakeResponse(403, "forbidden")
+        if url == "https://r.jina.ai/https://news.bet365.com/en-us/sport/more-sports-and-news/2022102012405478121":
+            return _FakeResponse(
+                200,
+                "<html><a href='/en-us/article/bet365-announces-official-launch-in-maryland/2025090211305963186'>bet365 announces official launch in Maryland</a></html>",
+            )
+        return _FakeResponse(404, "not found")
+
+    monkeypatch.setattr(release_discovery.requests, "get", fake_get)
+
+    html, meta = release_discovery._fetch_html(
+        "https://news.bet365.com/en-us/sport/more-sports-and-news/2022102012405478121",
+        source_name="Bet365",
+        stage="listing_fetch",
+        timeout=1,
+        max_retries=0,
+    )
+
+    assert html is not None
+    assert "maryland" in html.lower()
+    assert meta["ok"] is True
+    assert meta["error_kind"] == "success"
+    assert calls == [
+        "https://news.bet365.com/en-us/sport/more-sports-and-news/2022102012405478121",
+        "https://r.jina.ai/https://news.bet365.com/en-us/sport/more-sports-and-news/2022102012405478121",
+    ]
+
+
+def test_fetch_html_uses_jina_fallback_for_draftkings_listing_403(monkeypatch):
+    calls: list[str] = []
+
+    def fake_get(url, *args, **kwargs):
+        calls.append(url)
+        if url == "https://www.draftkings.com/news-about":
+            return _FakeResponse(403, "forbidden")
+        if url == "https://r.jina.ai/https://www.draftkings.com/news-about":
+            return _FakeResponse(
+                200,
+                "[DraftKings Debuts Predictions App, Entering Prediction Markets](https://www.draftkings.com/draftkings-debuts-predictions-app-entering-prediction-markets)",
+            )
+        return _FakeResponse(404, "not found")
+
+    monkeypatch.setattr(release_discovery.requests, "get", fake_get)
+
+    html, meta = release_discovery._fetch_html(
+        "https://www.draftkings.com/news-about",
+        source_name="DraftKings",
+        stage="listing_fetch",
+        timeout=1,
+        max_retries=0,
+    )
+
+    assert html is not None
+    assert "draftkings-debuts-predictions-app-entering-prediction-markets" in html
+    assert meta["ok"] is True
+    assert meta["error_kind"] == "success"
+    assert calls == [
+        "https://www.draftkings.com/news-about",
+        "https://r.jina.ai/https://www.draftkings.com/news-about",
+    ]
+
+
 def test_discover_recent_releases_source_timeout_is_non_fatal(monkeypatch):
     db = _build_session()
     try:

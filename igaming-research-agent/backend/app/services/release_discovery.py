@@ -43,6 +43,9 @@ _SOURCE_TLS_INSECURE_HOSTS = {
 _SOURCE_LISTING_JINA_FALLBACK_HOSTS = {
     "www.catenamedia.com",
     "catenamedia.com",
+    "www.draftkings.com",
+    "draftkings.com",
+    "news.bet365.com",
 }
 
 

@@ -324,7 +324,6 @@ def init_db() -> None:
     ensure_report_runtime_columns()
     ensure_release_source_runtime_columns()
     ensure_app_migrations_table()
-    apply_release_source_data_migration()
     ensure_prompt_templates_seeded()
 
 

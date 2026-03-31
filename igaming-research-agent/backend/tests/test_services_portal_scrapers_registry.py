@@ -9,6 +9,7 @@ from app.services.portal_scrapers.parsers.bragg_html import BraggHtmlParser
 from app.services.portal_scrapers.parsers.caesars_html import CaesarsHtmlParser
 from app.services.portal_scrapers.parsers.catenamedia_html import CatenaMediaHtmlParser
 from app.services.portal_scrapers.parsers.config_driven_html import ConfigDrivenHtmlParser
+from app.services.portal_scrapers.parsers.draftkings_html import DraftKingsHtmlParser
 from app.services.portal_scrapers.parsers.evolution_html import EvolutionHtmlParser
 from app.services.portal_scrapers.parsers.fanduel_html import FanDuelHtmlParser
 from app.services.portal_scrapers.parsers.fanatics_html import FanaticsHtmlParser
@@ -117,6 +118,11 @@ def test_registry_resolves_fanduel_parser_for_fanduel_source():
 def test_registry_resolves_fanatics_parser_for_fanatics_source():
     parser = resolve_listing_parser("https://www.fanaticsinc.com/press-releases", "Fanatics Sportsbook")
     assert isinstance(parser, FanaticsHtmlParser)
+
+
+def test_registry_resolves_draftkings_parser_for_draftkings_source():
+    parser = resolve_listing_parser("https://www.draftkings.com/news-about", "DraftKings")
+    assert isinstance(parser, DraftKingsHtmlParser)
 
 
 def test_registry_resolves_hardrock_parser_for_hardrock_source():
