@@ -6,6 +6,7 @@ TODO: Integrate Anthropic Claude client calls for both relevance and scoring.
 import logging
 import os
 import re
+import datetime
 from typing import Optional
 
 from anthropic import Anthropic
@@ -105,6 +106,22 @@ Rules:
 - Mention the stage (relevance or scoring).
 - Mention the concrete trigger (e.g., non-US focus, no policy/business signal, score below 6, malformed scoring output).
 - Do not mention model internals or policies.
+"""
+
+_DATE_EXTRACT_SYSTEM_PROMPT_FALLBACK = """
+You extract publication dates from article content.
+
+Return exactly two lines:
+FOUND: YES or NO
+DATE: ISO-8601 UTC date or datetime
+
+Rules:
+- If a specific publication date is available, use it.
+- If only a date (without time) is available, output YYYY-MM-DD.
+- If date cannot be determined reliably, return:
+    FOUND: NO
+    DATE: UNKNOWN
+- Do not guess beyond explicit evidence in provided text.
 """
 
 _PRIORITY_KEYWORDS = [
@@ -235,6 +252,69 @@ def _parse_score(article: dict) -> int:
         return int(raw or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def infer_published_date_with_llm(
+    article: dict,
+    now_utc: datetime.datetime | None = None,
+    db: Session | None = None,
+) -> Optional[str]:
+    """Infer article publication date with LLM when deterministic parsing fails.
+
+    Returns an ISO-like date string (e.g., YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ),
+    or None when date cannot be extracted confidently.
+    """
+    item = _safe_article(article)
+    content = _extract_key_content(item, max_chars=2500)
+    now_text = (now_utc or datetime.datetime.utcnow()).replace(microsecond=0).isoformat() + "Z"
+
+    prompt = (
+        f"Reference now (UTC): {now_text}\n"
+        f"URL: {item['url']}\n"
+        f"Title: {item['title']}\n"
+        f"Snippet: {item['snippet']}\n"
+        f"Content:\n{content}"
+    )
+
+    try:
+        system_prompt = get_active_prompt_content(
+            db,
+            "date_extract_system",
+            _DATE_EXTRACT_SYSTEM_PROMPT_FALLBACK,
+        )
+        response = anthropic_client.messages.create(
+            model=_MODEL,
+            max_tokens=80,
+            temperature=0,
+            system=system_prompt,
+            messages=[{"role": "user", "content": prompt}],
+        )
+    except Exception as exc:
+        logger.warning(
+            "Date extraction fallback failed for url=%s model=%s error=%s",
+            item.get("url", ""),
+            _MODEL,
+            exc,
+        )
+        return None
+
+    raw = response.content[0].text.strip() if response.content else ""
+    found_match = re.search(r"FOUND:\s*(YES|NO)", raw, re.IGNORECASE)
+    date_match = re.search(r"DATE:\s*([^\n]+)", raw, re.IGNORECASE)
+    if not found_match:
+        return None
+
+    if found_match.group(1).upper() != "YES":
+        return None
+
+    if not date_match:
+        return None
+
+    date_value = date_match.group(1).strip()
+    if not date_value or date_value.upper() == "UNKNOWN":
+        return None
+
+    return date_value
 
 
 def _base_rejection_metadata(article: dict) -> dict:

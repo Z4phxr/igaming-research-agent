@@ -5,6 +5,7 @@ TODO: Add robust logging/telemetry and retry strategy per step.
 """
 
 import datetime
+import email.utils
 import logging
 import re
 
@@ -14,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models import Article, Report
-from app.services.analyzer import run_analysis_pipeline
+from app.services.analyzer import infer_published_date_with_llm, run_analysis_pipeline
 from app.services.release_discovery import discover_recent_releases
 from app.services.report_generator import generate_briefing
 from app.services.scraper import scrape_articles
@@ -100,6 +101,14 @@ def _parse_published_date(
         except ValueError:
             pass
 
+    # Handle RFC-2822 style timestamps, e.g. "Tue, 31 Mar 2026 14:12:00 GMT".
+    try:
+        parsed = email.utils.parsedate_to_datetime(raw)
+        if parsed is not None:
+            return _normalize_utc_naive(parsed)
+    except (TypeError, ValueError):
+        pass
+
     for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%d-%m-%Y", "%d/%m/%Y"):
         try:
             parsed = datetime.datetime.strptime(raw, fmt)
@@ -117,6 +126,103 @@ def _parse_published_date(
     return None
 
 
+def _extract_date_candidates_from_text(text: str, max_candidates: int = 30) -> list[str]:
+    """Extract potential date strings from arbitrary text."""
+    if not text:
+        return []
+
+    candidates: list[str] = []
+    patterns = [
+        r"\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b",
+        r"\b\d{1,2}[-/]\d{1,2}[-/]\d{4}\b",
+        r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}\b",
+        r"\b\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{4}\b",
+    ]
+
+    for pattern in patterns:
+        for match in re.findall(pattern, text, flags=re.IGNORECASE):
+            value = str(match).strip()
+            if value and value not in candidates:
+                candidates.append(value)
+            if len(candidates) >= max_candidates:
+                return candidates
+
+    return candidates
+
+
+def _extract_date_candidates_from_url(url: str) -> list[str]:
+    """Extract potential date tokens from URL paths."""
+    if not url:
+        return []
+
+    candidates: list[str] = []
+    patterns = [
+        r"/(\d{4})/(\d{1,2})/(\d{1,2})(?:/|$)",
+        r"/(\d{4})-(\d{1,2})-(\d{1,2})(?:/|$)",
+        r"/(\d{4})_(\d{1,2})_(\d{1,2})(?:/|$)",
+    ]
+
+    for pattern in patterns:
+        for year, month, day in re.findall(pattern, url):
+            token = f"{int(year):04d}-{int(month):02d}-{int(day):02d}"
+            if token not in candidates:
+                candidates.append(token)
+
+    return candidates
+
+
+def _infer_article_published_date(
+    article: dict,
+    now_utc: datetime.datetime,
+    db: Session | None = None,
+) -> tuple[datetime.datetime | None, str | None]:
+    """Infer article published date with deterministic parsing then LLM fallback.
+
+    LLM fallback is only used when deterministic extraction fails.
+    """
+    field_candidates = [
+        article.get("published_date"),
+        article.get("date"),
+        article.get("publication_date"),
+        article.get("pub_date"),
+        article.get("publishedAt"),
+    ]
+
+    for value in field_candidates:
+        parsed = _parse_published_date(value, now_utc=now_utc)
+        if parsed is not None:
+            return parsed, "provider"
+
+    url = str(article.get("url") or "").strip()
+    for token in _extract_date_candidates_from_url(url):
+        parsed = _parse_published_date(token, now_utc=now_utc)
+        if parsed is not None:
+            return parsed, "url"
+
+    text_candidates: list[str] = []
+    for field in ("title", "snippet", "full_text"):
+        value = str(article.get(field) or "").strip()
+        if not value:
+            continue
+        sample = value[:5000] if field == "full_text" else value
+        text_candidates.extend(_extract_date_candidates_from_text(sample))
+        if len(text_candidates) >= 30:
+            break
+
+    for token in text_candidates:
+        parsed = _parse_published_date(token, now_utc=now_utc)
+        if parsed is not None:
+            return parsed, "text"
+
+    llm_date_value = infer_published_date_with_llm(article, now_utc=now_utc, db=db)
+    if llm_date_value is not None:
+        parsed = _parse_published_date(llm_date_value, now_utc=now_utc)
+        if parsed is not None:
+            return parsed, "llm"
+
+    return None, None
+
+
 def _reject_article(article: dict, reason: str) -> dict:
     """Build a consistent rejected article payload for persistence/reporting."""
     return {
@@ -132,6 +238,7 @@ def _reject_article(article: dict, reason: str) -> dict:
 def _split_recent_articles(
     articles: list[dict],
     now_utc: datetime.datetime,
+    db: Session | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """Split articles by strict 24h freshness policy using published_date."""
     cutoff = now_utc - datetime.timedelta(hours=24)
@@ -139,12 +246,7 @@ def _split_recent_articles(
     rejected: list[dict] = []
 
     for article in articles:
-        raw_value = article.get("published_date")
-        if raw_value is None or (isinstance(raw_value, str) and not raw_value.strip()):
-            rejected.append(_reject_article(article, DATE_CHECK_FAILED_REASON))
-            continue
-
-        published_at = _parse_published_date(raw_value, now_utc=now_utc)
+        published_at, date_source = _infer_article_published_date(article, now_utc=now_utc, db=db)
         if published_at is None:
             rejected.append(_reject_article(article, DATE_CHECK_FAILED_REASON))
             continue
@@ -157,7 +259,13 @@ def _split_recent_articles(
             rejected.append(_reject_article(article, "stale_published_date"))
             continue
 
-        recent.append({**article, "published_date": published_at})
+        recent.append(
+            {
+                **article,
+                "published_date": published_at,
+                "date_inference_source": date_source or "unknown",
+            }
+        )
 
     return recent, rejected
 
@@ -172,6 +280,13 @@ def _persist_articles(session: Session, items: list[dict]) -> list[Article]:
             continue
 
         published_date = _parse_published_date(item.get("published_date"))
+        date_inference_source = str(item.get("date_inference_source") or "")
+        if date_inference_source == "llm" and published_date is not None:
+            logger.info(
+                "Article published_date inferred by LLM fallback url=%s published_date=%s",
+                url,
+                published_date.isoformat(),
+            )
 
         existing = session.query(Article).filter(Article.url == url).first()
         if existing:
@@ -277,7 +392,7 @@ def run_articles_pipeline(db: Session | None = None, raise_on_error: bool = Fals
         if not scraped_articles:
             logger.warning("Articles pipeline scrape returned no articles")
 
-        recent_articles, freshness_rejections = _split_recent_articles(scraped_articles, pipeline_now)
+        recent_articles, freshness_rejections = _split_recent_articles(scraped_articles, pipeline_now, db=session)
         logger.info(
             "Articles pipeline step freshness complete: recent=%s rejected=%s",
             len(recent_articles),
