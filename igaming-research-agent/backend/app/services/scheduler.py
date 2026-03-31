@@ -217,6 +217,10 @@ def _extract_date_candidates_from_text(text: str, max_candidates: int = 30) -> l
     ]
 
     for pattern in patterns:
+        scheduler_hour, scheduler_minute, scheduler_timezone = _read_scheduler_settings_from_db()
+        _upsert_scheduler_jobs(scheduler_hour, scheduler_minute, scheduler_timezone)
+        if not _scheduler.running:
+            _scheduler.start()
         for match in re.findall(pattern, text, flags=re.IGNORECASE):
             value = str(match).strip()
             if value and value not in candidates:
@@ -620,27 +624,14 @@ def run_daily_pipeline(db: Session | None = None, raise_on_error: bool = False) 
             session.close()
 
 
-def start_scheduler() -> None:
-    """Start APScheduler daily cron task with configurable time.
-
-    Reads scheduler_hour and scheduler_minute from database PipelineSettings.
-    Falls back to environment config if database not ready.
-
-    TODO: Prevent duplicate scheduling in multi-worker deployment.
-    """
-    if _scheduler.running:
-        return
-
-    from app.models import PipelineSettings
-
-    # Try to read from database, fall back to config if unavailable
+def _read_scheduler_settings_from_db() -> tuple[int, int, str]:
     scheduler_hour = 7
     scheduler_minute = 0
     scheduler_timezone = "UTC"
 
     try:
         db = SessionLocal()
-        settings = db.query(PipelineSettings).first()
+        settings = db.query(PipelineSettingsModel).first()
         if settings:
             scheduler_hour = settings.scheduler_hour
             scheduler_minute = settings.scheduler_minute
@@ -649,8 +640,15 @@ def start_scheduler() -> None:
     except Exception as e:
         logger.warning(f"Failed to read pipeline settings from DB: {e}. Using defaults.")
 
+    return scheduler_hour, scheduler_minute, scheduler_timezone
+
+
+def _upsert_scheduler_jobs(scheduler_hour: int, scheduler_minute: int, scheduler_timezone: str) -> None:
     logger.info(
-        f"Scheduler configured to run at {scheduler_hour:02d}:{scheduler_minute:02d} {scheduler_timezone}"
+        "Scheduler configured to run at %02d:%02d %s",
+        scheduler_hour,
+        scheduler_minute,
+        scheduler_timezone,
     )
 
     def _safe_add_job(func, job_id: str) -> None:
@@ -674,7 +672,27 @@ def start_scheduler() -> None:
 
     _safe_add_job(run_articles_pipeline, "daily_articles_pipeline")
     _safe_add_job(run_release_pipeline, "daily_releases_pipeline")
-    _scheduler.start()
+
+
+def refresh_scheduler() -> None:
+    """Apply current DB scheduler settings to APScheduler immediately."""
+    scheduler_hour, scheduler_minute, scheduler_timezone = _read_scheduler_settings_from_db()
+    _upsert_scheduler_jobs(scheduler_hour, scheduler_minute, scheduler_timezone)
+    if not _scheduler.running:
+        _scheduler.start()
+
+
+def start_scheduler() -> None:
+    """Start APScheduler daily cron task with configurable time.
+
+    Reads scheduler_hour and scheduler_minute from database PipelineSettings.
+    Falls back to environment config if database not ready.
+
+    TODO: Prevent duplicate scheduling in multi-worker deployment.
+    """
+    if _scheduler.running:
+        return
+    refresh_scheduler()
 
 
 def stop_scheduler() -> None:

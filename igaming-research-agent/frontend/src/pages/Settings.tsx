@@ -299,7 +299,7 @@ export default function Settings() {
         release_recent_window_hours: pipelineSettings.release_recent_window_hours,
       });
       setPipelineSettings(updated);
-      alert('Pipeline schedule updated. Note: changes take effect after app restart.');
+      alert('Pipeline schedule updated and applied immediately.');
     } catch (error) {
       setPipelineSettingsError(error instanceof Error ? error.message : 'Unable to save pipeline settings');
     } finally {

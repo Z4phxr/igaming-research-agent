@@ -274,28 +274,6 @@ export default function Dashboard() {
           {view === 'new_releases' && (
             <div className="space-y-3">
               <p className="text-sm text-[#888888]">Latest company releases discovered in the last {releaseWindowHours} hours</p>
-              <div>
-                <p className="text-xs uppercase tracking-[0.08em] text-[#555555]">Failed to check</p>
-                {failedSources.length === 0 ? (
-                  <p className="mt-1 text-sm text-[#555555]">No failed sources in this releases run.</p>
-                ) : (
-                  <ul className="mt-2 space-y-1 text-sm text-[#fca5a5]">
-                    {failedSources.map((item) => (
-                      <li key={`${item.source_url}-${item.reason || 'unknown'}`}>
-                        <a
-                          href={item.source_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[#fca5a5] underline decoration-[#7f1d1d] underline-offset-2 hover:text-[#fecaca]"
-                        >
-                          {item.company_name}
-                        </a>{' '}
-                        <span className="text-[#fca5a5]/80">({item.reason || 'failed'})</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
             </div>
           )}
         </div>
@@ -317,6 +295,31 @@ export default function Dashboard() {
         <div className="empty-state">
           <div className="empty-state-icon" />
           <p>No fresh releases found in the last {releaseWindowHours}h. Add more source pages in Settings.</p>
+        </div>
+      )}
+
+      {!loading && !error && latestReport && view === 'new_releases' && (
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-[0.08em] text-[#555555]">Failed to check</p>
+          {failedSources.length === 0 ? (
+            <p className="text-sm text-[#555555]">No failed sources in this releases run.</p>
+          ) : (
+            <ul className="space-y-1 text-sm text-[#fca5a5]">
+              {failedSources.map((item) => (
+                <li key={`${item.source_url}-${item.reason || 'unknown'}`}>
+                  <a
+                    href={item.source_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[#fca5a5] underline decoration-[#7f1d1d] underline-offset-2 hover:text-[#fecaca]"
+                  >
+                    {item.company_name}
+                  </a>{' '}
+                  <span className="text-[#fca5a5]/80">({item.reason || 'failed'})</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </section>

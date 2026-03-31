@@ -10,6 +10,7 @@ from app.database import get_db
 from app.models import PipelineSettings as PipelineSettingsModel
 from app.schemas import LlmHealthOut, PipelineSettingsOut, PipelineSettingsUpdate
 from app.services.analyzer import check_llm_connection
+from app.services.scheduler import refresh_scheduler
 
 router = APIRouter()
 
@@ -67,8 +68,7 @@ def update_pipeline_settings(
         settings.release_recent_window_hours,
     )
 
-    # TODO: Restart scheduler gracefully with new time
-    # For now, admin needs to restart the app for changes to take effect
+    refresh_scheduler()
 
     return settings
 
