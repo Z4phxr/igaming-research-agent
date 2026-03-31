@@ -145,7 +145,7 @@ export default function Dashboard() {
               <p className="text-xs uppercase tracking-[0.08em] text-[#555555]">Articles Kept</p>
               <p className="mt-2 font-mono text-2xl text-[#2563eb]">{latestReport.total_articles_kept ?? 0}</p>
             </div>
-            <div className="rounded-lg border border-[#222222] bg-[#111111] p-4">
+            <div className="rounded-lg border border-[#222222] bg-[#111111] p-4 text-center">
               <p className="text-xs uppercase tracking-[0.08em] text-[#555555]">Pipeline Actions</p>
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <button

@@ -880,8 +880,40 @@ export default function Settings() {
 
   const renderHealthView = () => (
     <div className="space-y-5">
+      <div className="rounded-lg border border-[#1f2937] bg-[#10141f] p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.08em] text-[#888888]">LLM Health Check</p>
+            <p className="text-sm text-[#cbd5e1]">Validate API key and model availability before running Re-evaluate.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleRunLlmHealthCheck()}
+            disabled={checkingLlmHealth}
+            className="rounded-md bg-[#1d4ed8] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#1e40af] disabled:opacity-50"
+          >
+            {checkingLlmHealth ? 'Checking...' : 'Check LLM Connection'}
+          </button>
+        </div>
+        {llmHealthResult && (
+          <div
+            className={`mt-3 rounded border p-3 text-sm ${
+              llmHealthResult.status === 'ok'
+                ? 'border-[#166534] bg-[#0f2518] text-[#bbf7d0]'
+                : 'border-[#7f1d1d] bg-[#2a1111] text-[#fecaca]'
+            }`}
+          >
+            <p>
+              Provider: <span className="font-semibold">{llmHealthResult.provider}</span> | Model:{' '}
+              <span className="font-semibold">{llmHealthResult.model}</span>
+            </p>
+            <p className="mt-1">{llmHealthResult.message}</p>
+          </div>
+        )}
+      </div>
+
       <div className="flex items-center justify-between">
-        <h3 className="text-2xl font-semibold text-white">Release Source Health Check</h3>
+        <h3 className="text-2xl font-semibold text-white">Health Checks</h3>
         <button
           type="button"
           onClick={() => void handleRunHealthCheck()}
@@ -890,6 +922,13 @@ export default function Settings() {
         >
           {runningHealthCheck ? 'Running health check...' : 'Run Health Check'}
         </button>
+      </div>
+
+      <div className="rounded-lg border border-[#4b5563] bg-[#0f172a] p-4">
+        <p className="text-xs uppercase tracking-[0.08em] text-[#888888] mb-2">Release Source Health Checks</p>
+        <p className="text-sm text-[#cbd5e1]">
+          Use these checks to validate each company source and quickly identify broken or stale feeds.
+        </p>
       </div>
 
       {healthSummary && (
@@ -1036,38 +1075,33 @@ export default function Settings() {
 
   const renderPipelineSettingsView = () => (
     <div className="space-y-5">
-      <h3 className="text-2xl font-semibold text-white">Pipeline Schedule</h3>
+      <h3 className="text-2xl font-semibold text-white">Pipeline Settings</h3>
 
-      <div className="rounded-lg border border-[#1f2937] bg-[#10141f] p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="rounded-lg border border-[#4b3a0b] bg-[#17130a] p-4">
+        <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.08em] text-[#888888]">LLM Health Check</p>
-            <p className="text-sm text-[#cbd5e1]">Validate API key and model availability before running Re-evaluate.</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => void handleRunLlmHealthCheck()}
-            disabled={checkingLlmHealth}
-            className="rounded-md bg-[#1d4ed8] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#1e40af] disabled:opacity-50"
-          >
-            {checkingLlmHealth ? 'Checking...' : 'Check LLM Connection'}
-          </button>
-        </div>
-        {llmHealthResult && (
-          <div
-            className={`mt-3 rounded border p-3 text-sm ${
-              llmHealthResult.status === 'ok'
-                ? 'border-[#166534] bg-[#0f2518] text-[#bbf7d0]'
-                : 'border-[#7f1d1d] bg-[#2a1111] text-[#fecaca]'
-            }`}
-          >
-            <p>
-              Provider: <span className="font-semibold">{llmHealthResult.provider}</span> | Model:{' '}
-              <span className="font-semibold">{llmHealthResult.model}</span>
+            <p className="text-sm font-semibold text-[#fcd34d]">SHOW ALL INFO</p>
+            <p className="mt-1 text-xs text-[#fef3c7]">
+              When enabled, dashboard rejected cards request extra LLM "why failed" details. This increases API cost.
             </p>
-            <p className="mt-1">{llmHealthResult.message}</p>
           </div>
-        )}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              aria-label="toggle-show-all-info"
+              onClick={() => handleToggleShowAllInfo(!showAllInfo)}
+              className={`h-6 w-11 rounded-full border p-0.5 transition-colors ${
+                showAllInfo ? 'border-[#f59e0b] bg-[#f59e0b]' : 'border-[#333333] bg-[#1a1a1a]'
+              }`}
+            >
+              <span
+                className={`block h-4 w-4 rounded-full bg-white transition-transform ${
+                  showAllInfo ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="rounded-lg border border-[#4b5563] bg-[#0f172a] p-4">
@@ -1175,33 +1209,6 @@ export default function Settings() {
 
   return (
     <section className="space-y-5">
-      <div className="rounded-lg border border-[#4b3a0b] bg-[#17130a] p-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold text-[#fcd34d]">SHOW ALL INFO</p>
-            <p className="mt-1 text-xs text-[#fef3c7]">
-              When enabled, dashboard rejected cards request extra LLM "why failed" details. This increases API cost.
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              aria-label="toggle-show-all-info"
-              onClick={() => handleToggleShowAllInfo(!showAllInfo)}
-              className={`h-6 w-11 rounded-full border p-0.5 transition-colors ${
-                showAllInfo ? 'border-[#f59e0b] bg-[#f59e0b]' : 'border-[#333333] bg-[#1a1a1a]'
-              }`}
-            >
-              <span
-                className={`block h-4 w-4 rounded-full bg-white transition-transform ${
-                  showAllInfo ? 'translate-x-5' : 'translate-x-0'
-                }`}
-              />
-            </button>
-          </div>
-        </div>
-      </div>
-
       <div className="flex flex-wrap gap-2 rounded-lg border border-[#222222] bg-[#0f0f0f] p-2">
         <TabButton active={activeView === 'queries'} onClick={() => setActiveView('queries')}>
           Query Manager
@@ -1210,13 +1217,13 @@ export default function Settings() {
           Release Source Manager
         </TabButton>
         <TabButton active={activeView === 'health'} onClick={() => setActiveView('health')}>
-          Release Source Health Check
+          Health Checks
         </TabButton>
         <TabButton active={activeView === 'prompts'} onClick={() => setActiveView('prompts')}>
           Prompt Manager
         </TabButton>
         <TabButton active={activeView === 'pipeline'} onClick={() => setActiveView('pipeline')}>
-          Pipeline Schedule
+          Pipeline Settings
         </TabButton>
       </div>
 

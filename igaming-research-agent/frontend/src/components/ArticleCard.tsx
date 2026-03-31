@@ -85,7 +85,7 @@ export default function ArticleCard({
       : 'Date unavailable';
 
     return (
-      <article className="space-y-2 rounded-lg border border-[#222222] bg-[#111111] p-4 transition-all duration-150 ease-in-out hover:border-[#333333] hover:bg-[#151515]">
+      <article className="space-y-2.5 rounded-lg border border-[#222222] bg-[#111111] p-4 transition-all duration-150 ease-in-out hover:border-[#333333] hover:bg-[#151515]">
         <p className="font-mono text-xs text-[#888888]">{formattedDate}</p>
         <p className="text-xs uppercase tracking-[0.08em] text-[#2563eb]">
           {article.source_domain || 'unknown source'}
