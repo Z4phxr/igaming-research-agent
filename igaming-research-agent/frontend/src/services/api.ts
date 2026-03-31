@@ -362,6 +362,14 @@ export interface PipelineReevaluateResult {
   kept_articles: number;
 }
 
+export interface LlmHealthResult {
+  status: string;
+  provider: string;
+  model: string;
+  message: string;
+  error_code?: string | null;
+}
+
 export async function getPipelineSettings(): Promise<PipelineSettings> {
   try {
     const { data } = await api.get<PipelineSettings>('/pipeline-settings');
@@ -390,5 +398,14 @@ export async function runReevaluateTopStories(): Promise<PipelineReevaluateResul
     return data;
   } catch (error) {
     throw new Error(getApiErrorMessage(error, 'Failed to re-evaluate Top Stories.'));
+  }
+}
+
+export async function getLlmHealth(): Promise<LlmHealthResult> {
+  try {
+    const { data } = await api.get<LlmHealthResult>('/pipeline-settings/llm-health');
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to run LLM health check.'));
   }
 }

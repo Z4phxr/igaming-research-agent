@@ -186,3 +186,11 @@ class PipelineReevaluateOut(BaseModel):
     processed_articles: int
     updated_articles: int
     kept_articles: int
+
+
+class LlmHealthOut(BaseModel):
+    status: str
+    provider: str
+    model: str
+    message: str
+    error_code: Optional[str] = None

@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import PipelineSettings as PipelineSettingsModel
-from app.schemas import PipelineSettingsOut, PipelineSettingsUpdate
+from app.schemas import LlmHealthOut, PipelineSettingsOut, PipelineSettingsUpdate
+from app.services.analyzer import check_llm_connection
 
 router = APIRouter()
 
@@ -61,5 +62,11 @@ def update_pipeline_settings(
     # For now, admin needs to restart the app for changes to take effect
 
     return settings
+
+
+@router.get("/llm-health", response_model=LlmHealthOut)
+def get_llm_health():
+    """Check LLM provider connectivity and configured model availability."""
+    return check_llm_connection()
 
 

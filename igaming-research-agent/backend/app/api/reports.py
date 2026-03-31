@@ -130,6 +130,28 @@ def _reevaluate_latest_top_stories(db: Session) -> dict:
 
     analysis_result = run_analysis_pipeline(analysis_input, db=db)
     all_articles = analysis_result.get("all_articles", [])
+
+    # Safety guard: if model access is broken (e.g., model not found), stage-1 can
+    # fail for every article and would otherwise overwrite all records as rejected.
+    if all_articles and len(all_articles) == len(top_story_articles):
+        all_failed_relevance = all(
+            str(item.get("rejection_reason") or "") == "failed_relevance_filter"
+            for item in all_articles
+        )
+        if all_failed_relevance:
+            kept_before = sum(1 for article in top_story_articles if bool(article.kept))
+            return {
+                "status": "error",
+                "message": (
+                    "Re-evaluate aborted: LLM relevance checks failed for all articles. "
+                    "Verify ANTHROPIC_ANALYZER_MODEL and API key access."
+                ),
+                "report_id": report.id,
+                "processed_articles": len(top_story_articles),
+                "updated_articles": 0,
+                "kept_articles": kept_before,
+            }
+
     article_by_url = {
         str(item.get("url") or ""): item
         for item in all_articles

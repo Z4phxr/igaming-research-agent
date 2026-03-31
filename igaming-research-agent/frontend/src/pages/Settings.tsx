@@ -19,7 +19,9 @@ import {
   updateReleaseSource,
   updateQuery,
   getPipelineSettings,
+  getLlmHealth,
   updatePipelineSettings,
+  type LlmHealthResult,
   type PipelineSettings,
 } from '@/services/api';
 import type {
@@ -52,6 +54,8 @@ export default function Settings() {
   const [pipelineSettings, setPipelineSettings] = useState<PipelineSettings | null>(null);
   const [savingPipelineSettings, setSavingPipelineSettings] = useState(false);
   const [pipelineSettingsError, setPipelineSettingsError] = useState('');
+  const [checkingLlmHealth, setCheckingLlmHealth] = useState(false);
+  const [llmHealthResult, setLlmHealthResult] = useState<LlmHealthResult | null>(null);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [streamType, setStreamType] = useState('legislative');
@@ -335,6 +339,19 @@ export default function Settings() {
       setPipelineSettingsError(error instanceof Error ? error.message : 'Unable to save pipeline settings');
     } finally {
       setSavingPipelineSettings(false);
+    }
+  };
+
+  const handleRunLlmHealthCheck = async () => {
+    setCheckingLlmHealth(true);
+    setPipelineSettingsError('');
+    try {
+      const result = await getLlmHealth();
+      setLlmHealthResult(result);
+    } catch (error) {
+      setPipelineSettingsError(error instanceof Error ? error.message : 'Unable to run LLM health check');
+    } finally {
+      setCheckingLlmHealth(false);
     }
   };
 
@@ -1020,6 +1037,38 @@ export default function Settings() {
   const renderPipelineSettingsView = () => (
     <div className="space-y-5">
       <h3 className="text-2xl font-semibold text-white">Pipeline Schedule</h3>
+
+      <div className="rounded-lg border border-[#1f2937] bg-[#10141f] p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.08em] text-[#888888]">LLM Health Check</p>
+            <p className="text-sm text-[#cbd5e1]">Validate API key and model availability before running Re-evaluate.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleRunLlmHealthCheck()}
+            disabled={checkingLlmHealth}
+            className="rounded-md bg-[#1d4ed8] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#1e40af] disabled:opacity-50"
+          >
+            {checkingLlmHealth ? 'Checking...' : 'Check LLM Connection'}
+          </button>
+        </div>
+        {llmHealthResult && (
+          <div
+            className={`mt-3 rounded border p-3 text-sm ${
+              llmHealthResult.status === 'ok'
+                ? 'border-[#166534] bg-[#0f2518] text-[#bbf7d0]'
+                : 'border-[#7f1d1d] bg-[#2a1111] text-[#fecaca]'
+            }`}
+          >
+            <p>
+              Provider: <span className="font-semibold">{llmHealthResult.provider}</span> | Model:{' '}
+              <span className="font-semibold">{llmHealthResult.model}</span>
+            </p>
+            <p className="mt-1">{llmHealthResult.message}</p>
+          </div>
+        )}
+      </div>
 
       <div className="rounded-lg border border-[#4b5563] bg-[#0f172a] p-4">
         <p className="text-xs uppercase tracking-[0.08em] text-[#888888] mb-2">About scheduling</p>

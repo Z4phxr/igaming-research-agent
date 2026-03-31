@@ -32,6 +32,55 @@ anthropic_client = Anthropic(api_key=_anthropic_api_key)
 # narrative generation in report_generator.py only.
 _MODEL = os.getenv("ANTHROPIC_ANALYZER_MODEL", "claude-3-5-haiku-20241022").strip() or "claude-3-5-haiku-20241022"
 
+
+def check_llm_connection() -> dict:
+    """Perform a lightweight connectivity + model availability check."""
+    if not _anthropic_api_key:
+        return {
+            "status": "error",
+            "provider": "anthropic",
+            "model": _MODEL,
+            "message": "ANTHROPIC_API_KEY is missing.",
+            "error_code": "missing_api_key",
+        }
+
+    try:
+        response = anthropic_client.messages.create(
+            model=_MODEL,
+            max_tokens=5,
+            temperature=0,
+            system="You are a health-check responder. Reply with OK.",
+            messages=[{"role": "user", "content": "ping"}],
+        )
+        text = response.content[0].text.strip() if response.content else ""
+        return {
+            "status": "ok",
+            "provider": "anthropic",
+            "model": _MODEL,
+            "message": f"LLM reachable. Sample response: {text or 'OK'}",
+            "error_code": None,
+        }
+    except Exception as exc:
+        error_text = str(exc)
+        if "not_found_error" in error_text or "model:" in error_text:
+            return {
+                "status": "error",
+                "provider": "anthropic",
+                "model": _MODEL,
+                "message": (
+                    "Configured model is not available for this Anthropic API key. "
+                    "Set ANTHROPIC_ANALYZER_MODEL to a model your account can access."
+                ),
+                "error_code": "model_not_found",
+            }
+        return {
+            "status": "error",
+            "provider": "anthropic",
+            "model": _MODEL,
+            "message": f"LLM health check failed: {error_text}",
+            "error_code": "connection_failed",
+        }
+
 _RELEVANCE_SYSTEM_PROMPT_FALLBACK = """
 You are a strict content filter for a USA iGaming research agent.
 Answer only YES or NO.
