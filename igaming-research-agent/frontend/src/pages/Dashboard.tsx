@@ -92,8 +92,6 @@ export default function Dashboard() {
   const releaseArticles = [...(latestReport?.release_articles ?? [])].sort(
     (a, b) => new Date(b.published_date || b.scraped_date).getTime() - new Date(a.published_date || a.scraped_date).getTime(),
   );
-  const keptCount = articles.filter((article) => article.kept).length;
-  const totalScreened = latestReport?.total_articles_found ?? 0;
   const today = new Date();
   const subtitle = `${today.toLocaleDateString('en-US', { weekday: 'long' })}, ${today.toLocaleDateString('en-US', {
     month: 'long',
@@ -137,8 +135,8 @@ export default function Dashboard() {
           <div className="grid gap-3 md:grid-cols-4">
             <div className="rounded-lg border border-[#222222] bg-[#111111] p-4 text-center">
               <p className="text-xs uppercase tracking-[0.08em] text-[#555555]">Pipeline Time</p>
-              <p className="mt-2 text-[11px] text-[#888888]">Articles: <span className="text-[#cbd5e1]">{formatRunTime(latestReport.articles_pipeline_ran_at)}</span></p>
-              <p className="mt-1 text-[11px] text-[#888888]">Releases: <span className="text-[#cbd5e1]">{formatRunTime(latestReport.releases_pipeline_ran_at)}</span></p>
+              <p className="mt-2 text-[11px] text-[#888888]">Articles: <span className="text-[#2563eb]">{formatRunTime(latestReport.articles_pipeline_ran_at)}</span></p>
+              <p className="mt-1 text-[11px] text-[#888888]">Releases: <span className="text-[#2563eb]">{formatRunTime(latestReport.releases_pipeline_ran_at)}</span></p>
             </div>
             <div className="rounded-lg border border-[#222222] bg-[#111111] p-4 text-center">
               <p className="text-xs uppercase tracking-[0.08em] text-[#555555]">Articles Screened</p>
@@ -238,9 +236,7 @@ export default function Dashboard() {
 
           {view === 'top_stories' && (
             <>
-              <p className="text-sm text-[#888888]">Showing {keptCount} kept / {totalScreened} total screened</p>
               <div className="space-y-2">
-                <p className="text-[11px] uppercase tracking-[0.1em] text-[#555555]">Intelligence Briefing</p>
                 <div className="rounded-lg border border-[#222222] bg-[#111111] p-4">
                   {latestReport.briefing ? (
                     <ReactMarkdown

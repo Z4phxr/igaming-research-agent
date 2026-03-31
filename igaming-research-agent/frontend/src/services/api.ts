@@ -182,7 +182,11 @@ export async function deleteReleaseSource(id: number): Promise<void> {
 
 export async function runReleaseSourceHealthCheck(): Promise<ReleaseSourceHealthCheckResponse> {
   try {
-    const { data } = await api.post<ReleaseSourceHealthCheckResponse>('/release-sources/health-check', {});
+    const { data } = await api.post<ReleaseSourceHealthCheckResponse>(
+      '/release-sources/health-check',
+      {},
+      { timeout: 120000 },
+    );
     return data;
   } catch (error) {
     throw new Error(getApiErrorMessage(error, 'Failed to run release source health check.'));
