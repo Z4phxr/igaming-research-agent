@@ -14,13 +14,14 @@ class Settings(BaseSettings):
 
     scheduler_hour: int = 7
     scheduler_minute: int = 0
+    scheduler_timezone: str = "UTC"
 
     serper_api_key: str = ""
     anthropic_api_key: str = ""
     openai_api_key: str = ""
 
     release_recent_window_hours: int = 72
-    release_listing_fetch_timeout_seconds: int = 20
+    release_listing_fetch_timeout_seconds: int = 90
     release_fetch_timeout_seconds: int = 15
     release_fetch_max_retries: int = 2
     release_fetch_backoff_seconds: float = 1.0

@@ -21,6 +21,41 @@ describe('Settings', () => {
 
     vi.spyOn(apiService, 'getQueries').mockImplementation(async () => [...queries]);
     vi.spyOn(apiService, 'getReleaseSources').mockResolvedValue([] as any);
+    vi.spyOn(apiService, 'getPromptTemplates').mockResolvedValue([
+      {
+        id: 1,
+        key: 'analyzer.relevance_system',
+        title: 'Analyzer Relevance System Prompt',
+        description: 'desc',
+        draft_content: 'draft',
+        active_content: 'active',
+        active_version: 1,
+        created_at: '2026-03-22T00:00:00Z',
+        updated_at: '2026-03-22T00:00:00Z',
+      },
+    ] as any);
+    vi.spyOn(apiService, 'getPromptTemplate').mockResolvedValue({
+      id: 1,
+      key: 'analyzer.relevance_system',
+      title: 'Analyzer Relevance System Prompt',
+      description: 'desc',
+      draft_content: 'draft',
+      active_content: 'active',
+      active_version: 1,
+      created_at: '2026-03-22T00:00:00Z',
+      updated_at: '2026-03-22T00:00:00Z',
+      history: [],
+    } as any);
+    vi.spyOn(apiService, 'getPromptHistory').mockResolvedValue([] as any);
+    vi.spyOn(apiService, 'getPipelineSettings').mockResolvedValue({
+      id: 1,
+      scheduler_hour: 7,
+      scheduler_minute: 0,
+      scheduler_timezone: 'UTC',
+      updated_at: '2026-03-22T00:00:00Z',
+    } as any);
+    vi.spyOn(apiService, 'updatePromptDraft').mockResolvedValue({} as any);
+    vi.spyOn(apiService, 'publishPrompt').mockResolvedValue({} as any);
     vi.spyOn(apiService, 'createReleaseSource').mockResolvedValue({} as any);
     vi.spyOn(apiService, 'updateReleaseSource').mockResolvedValue({} as any);
     vi.spyOn(apiService, 'deleteReleaseSource').mockResolvedValue();
@@ -78,4 +113,5 @@ describe('Settings', () => {
       expect(screen.queryByText(/initial term/i)).not.toBeInTheDocument();
     });
   });
+
 });

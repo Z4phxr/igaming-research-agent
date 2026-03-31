@@ -6,9 +6,18 @@ TODO: Integrate Anthropic Claude client calls for both relevance and scoring.
 import logging
 import os
 import re
+import datetime
 from typing import Optional
 
 from anthropic import Anthropic
+from sqlalchemy.orm import Session
+
+from app.services.prompt_manager import (
+    PROMPT_KEY_REJECTION_EXPLAIN_SYSTEM,
+    PROMPT_KEY_RELEVANCE_SYSTEM,
+    PROMPT_KEY_SCORING_SYSTEM,
+    get_active_prompt_content,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +30,58 @@ anthropic_client = Anthropic(api_key=_anthropic_api_key)
 # Cost optimization: Haiku used for simple classification
 # and structured output tasks. Sonnet reserved for
 # narrative generation in report_generator.py only.
-_MODEL = "claude-haiku-4-5-20251001"
+_MODEL = os.getenv("ANTHROPIC_ANALYZER_MODEL", "claude-3-5-haiku-20241022").strip() or "claude-3-5-haiku-20241022"
 
-_RELEVANCE_SYSTEM_PROMPT = """
+
+def check_llm_connection() -> dict:
+    """Perform a lightweight connectivity + model availability check."""
+    if not _anthropic_api_key:
+        return {
+            "status": "error",
+            "provider": "anthropic",
+            "model": _MODEL,
+            "message": "ANTHROPIC_API_KEY is missing.",
+            "error_code": "missing_api_key",
+        }
+
+    try:
+        response = anthropic_client.messages.create(
+            model=_MODEL,
+            max_tokens=5,
+            temperature=0,
+            system="You are a health-check responder. Reply with OK.",
+            messages=[{"role": "user", "content": "ping"}],
+        )
+        text = response.content[0].text.strip() if response.content else ""
+        return {
+            "status": "ok",
+            "provider": "anthropic",
+            "model": _MODEL,
+            "message": f"LLM reachable. Sample response: {text or 'OK'}",
+            "error_code": None,
+        }
+    except Exception as exc:
+        error_text = str(exc)
+        if "not_found_error" in error_text or "model:" in error_text:
+            return {
+                "status": "error",
+                "provider": "anthropic",
+                "model": _MODEL,
+                "message": (
+                    "Configured model is not available for this Anthropic API key. "
+                    "Set ANTHROPIC_ANALYZER_MODEL to a model your account can access."
+                ),
+                "error_code": "model_not_found",
+            }
+        return {
+            "status": "error",
+            "provider": "anthropic",
+            "model": _MODEL,
+            "message": f"LLM health check failed: {error_text}",
+            "error_code": "connection_failed",
+        }
+
+_RELEVANCE_SYSTEM_PROMPT_FALLBACK = """
 You are a strict content filter for a USA iGaming research agent.
 Answer only YES or NO.
 
@@ -43,7 +101,7 @@ Answer NO if:
 - International news (UK, Europe, Asia) unless it directly impacts USA companies
 """
 
-_SCORING_SYSTEM_PROMPT = """
+_SCORING_SYSTEM_PROMPT_FALLBACK = """
 You are a senior analyst for a USA iGaming investment research firm.
 Analyze the article and respond in this EXACT format with no extra text:
 
@@ -86,6 +144,33 @@ Scoring guide (use USA-specific context):
 
 CRITICAL: If article mentions bill number (SB/HB/AB) + committee/vote, minimum score is 6.
 If federal agency (CFTC/DOJ/SEC) takes action, minimum score is 8.
+"""
+
+_REJECTION_EXPLAIN_SYSTEM_PROMPT_FALLBACK = """
+You explain why an article was rejected in an iGaming research pipeline.
+Be specific, concise, and factual.
+
+Rules:
+- Return 1-2 short sentences only.
+- Mention the stage (relevance or scoring).
+- Mention the concrete trigger (e.g., non-US focus, no policy/business signal, score below 6, malformed scoring output).
+- Do not mention model internals or policies.
+"""
+
+_DATE_EXTRACT_SYSTEM_PROMPT_FALLBACK = """
+You extract publication dates from article content.
+
+Return exactly two lines:
+FOUND: YES or NO
+DATE: ISO-8601 UTC date or datetime
+
+Rules:
+- If a specific publication date is available, use it.
+- If only a date (without time) is available, output YYYY-MM-DD.
+- If date cannot be determined reliably, return:
+    FOUND: NO
+    DATE: UNKNOWN
+- Do not guess beyond explicit evidence in provided text.
 """
 
 _PRIORITY_KEYWORDS = [
@@ -209,12 +294,198 @@ def _safe_article(article: dict) -> dict:
     }
 
 
-def is_relevant(article: dict) -> bool:
+def _parse_score(article: dict) -> int:
+    """Extract integer score from an article-like dict safely."""
+    raw = article.get("raw_score", article.get("score", 0))
+    try:
+        return int(raw or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def infer_published_date_with_llm(
+    article: dict,
+    now_utc: datetime.datetime | None = None,
+    db: Session | None = None,
+) -> Optional[str]:
+    """Infer article publication date with LLM when deterministic parsing fails.
+
+    Returns an ISO-like date string (e.g., YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ),
+    or None when date cannot be extracted confidently.
+    """
+    item = _safe_article(article)
+    content = _extract_key_content(item, max_chars=2500)
+    now_text = (now_utc or datetime.datetime.utcnow()).replace(microsecond=0).isoformat() + "Z"
+
+    prompt = (
+        f"Reference now (UTC): {now_text}\n"
+        f"URL: {item['url']}\n"
+        f"Title: {item['title']}\n"
+        f"Snippet: {item['snippet']}\n"
+        f"Content:\n{content}"
+    )
+
+    try:
+        system_prompt = get_active_prompt_content(
+            db,
+            "date_extract_system",
+            _DATE_EXTRACT_SYSTEM_PROMPT_FALLBACK,
+        )
+        response = anthropic_client.messages.create(
+            model=_MODEL,
+            max_tokens=80,
+            temperature=0,
+            system=system_prompt,
+            messages=[{"role": "user", "content": prompt}],
+        )
+    except Exception as exc:
+        logger.warning(
+            "Date extraction fallback failed for url=%s model=%s error=%s",
+            item.get("url", ""),
+            _MODEL,
+            exc,
+        )
+        return None
+
+    raw = response.content[0].text.strip() if response.content else ""
+    found_match = re.search(r"FOUND:\s*(YES|NO)", raw, re.IGNORECASE)
+    date_match = re.search(r"DATE:\s*([^\n]+)", raw, re.IGNORECASE)
+    if not found_match:
+        return None
+
+    if found_match.group(1).upper() != "YES":
+        return None
+
+    if not date_match:
+        return None
+
+    date_value = date_match.group(1).strip()
+    if not date_value or date_value.upper() == "UNKNOWN":
+        return None
+
+    return date_value
+
+
+def _base_rejection_metadata(article: dict) -> dict:
+    """Build deterministic rejection metadata without additional LLM cost."""
+    reason = str(article.get("rejection_reason") or "unknown_rejection")
+    score = _parse_score(article)
+
+    if reason == "failed_relevance_filter":
+        return {
+            "rejection_stage": "relevance",
+            "rejection_score": None,
+            "rejection_detail": "Rejected in relevance stage: article did not satisfy the strict USA iGaming relevance gate.",
+        }
+
+    if reason == "score_below_threshold":
+        if score >= 1:
+            return {
+                "rejection_stage": "scoring",
+                "rejection_score": score,
+                "rejection_detail": f"Rejected in scoring stage: score {score}/10 is below keep threshold 6/10.",
+            }
+        return {
+            "rejection_stage": "scoring",
+            "rejection_score": 0,
+            "rejection_detail": "Rejected in scoring stage: scoring failed before a valid numeric score was produced.",
+        }
+
+    if reason in {"Rejected: fail to check the date", "invalid_published_date", "missing_published_date"}:
+        return {
+            "rejection_stage": "freshness",
+            "rejection_score": None,
+            "rejection_detail": "Rejected in freshness stage: failed to parse or validate article published date.",
+        }
+
+    if reason == "stale_published_date":
+        return {
+            "rejection_stage": "freshness",
+            "rejection_score": None,
+            "rejection_detail": "Rejected in freshness stage: published date is older than the 24-hour window.",
+        }
+
+    if reason == "future_published_date":
+        return {
+            "rejection_stage": "freshness",
+            "rejection_score": None,
+            "rejection_detail": "Rejected in freshness stage: published date is in the future.",
+        }
+
+    return {
+        "rejection_stage": "pipeline",
+        "rejection_score": score if score > 0 else None,
+        "rejection_detail": f"Rejected: {reason}.",
+    }
+
+
+def _explain_rejection_with_llm(article: dict, metadata: dict, db: Session | None = None) -> Optional[str]:
+    """Return optional LLM explanation for rejected article when explicitly enabled."""
+    stage = str(metadata.get("rejection_stage") or "pipeline")
+    if stage not in {"relevance", "scoring"}:
+        return None
+
+    item = _safe_article(article)
+    reason = str(article.get("rejection_reason") or "unknown")
+    score = metadata.get("rejection_score")
+    content = _extract_key_content(item, max_chars=1200)
+
+    prompt = (
+        f"Stage: {stage}\n"
+        f"Reason code: {reason}\n"
+        f"Score: {score}\n"
+        f"Title: {item['title']}\n"
+        f"Snippet: {item['snippet']}\n"
+        f"Content: {content}"
+    )
+
+    try:
+        system_prompt = get_active_prompt_content(
+            db,
+            PROMPT_KEY_REJECTION_EXPLAIN_SYSTEM,
+            _REJECTION_EXPLAIN_SYSTEM_PROMPT_FALLBACK,
+        )
+        response = anthropic_client.messages.create(
+            model=_MODEL,
+            max_tokens=120,
+            temperature=0,
+            system=system_prompt,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        output = response.content[0].text.strip() if response.content else ""
+        return output or None
+    except Exception as exc:
+        # If model id is not available for this key/account, fail open quietly
+        # so report loading is not blocked by optional explanation calls.
+        if "not_found_error" in str(exc) or "model:" in str(exc):
+            return None
+        logger.warning(
+            "Rejection explanation failed for url=%s model=%s error=%s",
+            item.get("url", ""),
+            _MODEL,
+            exc,
+        )
+        return None
+
+
+def build_rejection_metadata(article: dict, include_llm_why: bool = False, db: Session | None = None) -> dict:
+    """Create rejection metadata for UI cards, with optional LLM explanation."""
+    metadata = _base_rejection_metadata(article)
+    metadata["rejection_llm_why"] = None
+
+    if include_llm_why:
+        metadata["rejection_llm_why"] = _explain_rejection_with_llm(article, metadata, db=db)
+
+    return metadata
+
+
+def is_relevant(article: dict, db: Session | None = None) -> bool:
     """Run stage-one binary relevance check (YES/NO) for a scraped article."""
     item = _safe_article(article)
     user_message = f"Title: {item['title']}\n\nSnippet: {item['snippet']}"
 
     try:
+        system_prompt = get_active_prompt_content(db, PROMPT_KEY_RELEVANCE_SYSTEM, _RELEVANCE_SYSTEM_PROMPT_FALLBACK)
         # Cost optimization: max_tokens=5 for a strict YES/NO answer.
         # Cost optimization: temperature=0 for deterministic outputs.
         # CHANGE 3: migrated model calls from OpenAI chat completions to Anthropic messages API.
@@ -222,17 +493,22 @@ def is_relevant(article: dict) -> bool:
             model=_MODEL,
             max_tokens=10,
             temperature=0,
-            system=_RELEVANCE_SYSTEM_PROMPT,
+            system=system_prompt,
             messages=[{"role": "user", "content": user_message}],
         )
         content = response.content[0].text.strip() if response.content else ""
         return "YES" in content.upper()
     except Exception as exc:
-        logger.warning("Relevance check failed for url=%s error=%s", item.get("url", ""), exc)
+        logger.warning(
+            "Relevance check failed for url=%s model=%s error=%s",
+            item.get("url", ""),
+            _MODEL,
+            exc,
+        )
         return False
 
 
-def score_and_summarize(article: dict | str) -> Optional[dict]:
+def score_and_summarize(article: dict | str, db: Session | None = None) -> Optional[dict]:
     """Run stage-two scoring and 3-sentence summarization for a relevant article.
 
     Accepts the primary dict payload, and also supports legacy raw-text input
@@ -254,6 +530,7 @@ def score_and_summarize(article: dict | str) -> Optional[dict]:
     user_message = f"Content: {content}"
 
     try:
+        system_prompt = get_active_prompt_content(db, PROMPT_KEY_SCORING_SYSTEM, _SCORING_SYSTEM_PROMPT_FALLBACK)
         # Cost optimization: content is truncated to 3000 chars before request.
         # Cost optimization: temperature=0 for deterministic outputs.
         # CHANGE 3: migrated model calls from OpenAI chat completions to Anthropic messages API.
@@ -261,11 +538,16 @@ def score_and_summarize(article: dict | str) -> Optional[dict]:
             model=_MODEL,
             max_tokens=200,
             temperature=0,
-            system=_SCORING_SYSTEM_PROMPT,
+            system=system_prompt,
             messages=[{"role": "user", "content": user_message}],
         )
     except Exception as exc:
-        logger.warning("Scoring failed for url=%s error=%s", item.get("url", ""), exc)
+        logger.warning(
+            "Scoring failed for url=%s model=%s error=%s",
+            item.get("url", ""),
+            _MODEL,
+            exc,
+        )
         return None
 
     raw = response.content[0].text.strip() if response.content else ""
@@ -312,7 +594,7 @@ def score_and_summarize(article: dict | str) -> Optional[dict]:
     }
 
 
-def run_analysis_pipeline(articles: list[dict]) -> dict[str, list[dict]]:
+def run_analysis_pipeline(articles: list[dict], db: Session | None = None) -> dict[str, list[dict]]:
     """Run two-stage relevance/scoring and return kept + all analyzed articles."""
     if not articles:
         logger.info("Analysis pipeline received no articles; nothing to do")
@@ -322,7 +604,7 @@ def run_analysis_pipeline(articles: list[dict]) -> dict[str, list[dict]]:
     all_articles: list[dict] = []
 
     for article in articles:
-        if is_relevant(article):
+        if is_relevant(article, db=db):
             relevant_articles.append(article)
         else:
             all_articles.append(
@@ -340,7 +622,7 @@ def run_analysis_pipeline(articles: list[dict]) -> dict[str, list[dict]]:
 
     scored_results: list[dict] = []
     for article in relevant_articles:
-        scored = score_and_summarize(article)
+        scored = score_and_summarize(article, db=db)
         if scored is not None:
             scored_results.append(scored)
         else:

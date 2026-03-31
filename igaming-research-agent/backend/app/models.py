@@ -114,6 +114,8 @@ class Report(Base):
     total_articles_kept: Mapped[int | None] = mapped_column(Integer, nullable=True)
     briefing: Mapped[str | None] = mapped_column(Text, nullable=True)
     briefing_generated_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
+    articles_pipeline_ran_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
+    releases_pipeline_ran_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
     generated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow, nullable=False)
 
     articles: Mapped[list[Article]] = relationship("Article", secondary=report_articles, back_populates="reports")
@@ -168,6 +170,79 @@ class ReleaseSource(Base):
     )
 
 
+class PromptTemplate(Base):
+    """Editable prompt template with active published version metadata."""
+
+    __tablename__ = "prompt_templates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    key: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    draft_content: Mapped[str] = mapped_column(Text, nullable=False)
+    active_content: Mapped[str] = mapped_column(Text, nullable=False)
+    active_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        default=datetime.datetime.utcnow,
+        onupdate=datetime.datetime.utcnow,
+        nullable=False,
+    )
+
+    versions: Mapped[list["PromptTemplateVersion"]] = relationship(
+        "PromptTemplateVersion",
+        back_populates="template",
+        cascade="all, delete-orphan",
+        order_by="PromptTemplateVersion.version.desc()",
+    )
+
+
+class PromptTemplateVersion(Base):
+    """Version history for prompt template publishes."""
+
+    __tablename__ = "prompt_template_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    prompt_template_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("prompt_templates.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    template: Mapped[PromptTemplate] = relationship("PromptTemplate", back_populates="versions")
+
+
+class PipelineSettings(Base):
+    """Application-wide pipeline configuration settings."""
+
+    __tablename__ = "pipeline_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    scheduler_hour: Mapped[int] = mapped_column(Integer, default=7, nullable=False)
+    scheduler_minute: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    scheduler_timezone: Mapped[str] = mapped_column(String(32), default="UTC", nullable=False)
+    release_recent_window_hours: Mapped[int] = mapped_column(Integer, default=72, nullable=False)
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        default=datetime.datetime.utcnow,
+        onupdate=datetime.datetime.utcnow,
+        nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<PipelineSettings {self.scheduler_hour:02d}:{self.scheduler_minute:02d} "
+            f"{self.scheduler_timezone} window={self.release_recent_window_hours}h>"
+        )
+
+
 Index("ix_articles_score", Article.score)
 Index("ix_articles_scraped_date", Article.scraped_date)
 Index("ix_release_sources_company_name", ReleaseSource.company_name)
+Index("ix_prompt_template_version_unique", PromptTemplateVersion.prompt_template_id, PromptTemplateVersion.version, unique=True)

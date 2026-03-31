@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import ArticleCard from '@/components/ArticleCard';
-import { getLatestReport } from '@/services/api';
+import {
+  getLatestReport,
+  runArticlesPipeline,
+  runPipeline,
+  runReevaluateTopStories,
+  runReleasesPipeline,
+} from '@/services/api';
 import type { Report } from '@/types';
 
 type DashboardView = 'top_stories' | 'new_releases';
@@ -10,15 +16,45 @@ export default function Dashboard() {
   const [latestReport, setLatestReport] = useState<Report | null>(null);
   const [view, setView] = useState<DashboardView>('top_stories');
   const [showAllArticles, setShowAllArticles] = useState(false);
+  const [showAllInfo, setShowAllInfo] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [actionLoading, setActionLoading] = useState<'' | 'all' | 'articles' | 'releases' | 'reevaluate'>('');
+  const [actionMessage, setActionMessage] = useState('');
+
+  const readShowAllInfoSetting = (): boolean => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    const storageLike = window.localStorage as { getItem?: (key: string) => string | null } | undefined;
+    if (!storageLike || typeof storageLike.getItem !== 'function') {
+      return false;
+    }
+
+    return storageLike.getItem('show_all_info') === 'true';
+  };
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const readSetting = (): void => {
+      setShowAllInfo(readShowAllInfoSetting());
+    };
+
+    readSetting();
+    window.addEventListener('storage', readSetting);
+    return () => window.removeEventListener('storage', readSetting);
+  }, []);
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       setError(false);
       try {
-        const report = await getLatestReport(showAllArticles);
+        const report = await getLatestReport(showAllArticles, showAllInfo);
         setLatestReport(report);
       } catch {
         setError(true);
@@ -28,19 +64,52 @@ export default function Dashboard() {
     };
 
     void load();
-  }, [showAllArticles]);
+  }, [showAllArticles, showAllInfo]);
+
+  const refreshLatestReport = async (): Promise<void> => {
+    const report = await getLatestReport(showAllArticles, showAllInfo);
+    setLatestReport(report);
+  };
+
+  const runAction = async (
+    kind: 'all' | 'articles' | 'releases' | 'reevaluate',
+    action: () => Promise<{ message?: string }>,
+  ): Promise<void> => {
+    setActionLoading(kind);
+    setActionMessage('');
+    try {
+      const result = await action();
+      await refreshLatestReport();
+      setActionMessage(result.message || 'Action completed successfully.');
+    } catch (err) {
+      setActionMessage(err instanceof Error ? err.message : 'Action failed.');
+    } finally {
+      setActionLoading('');
+    }
+  };
 
   const articles = [...(latestReport?.articles ?? [])].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
   const releaseArticles = [...(latestReport?.release_articles ?? [])].sort(
     (a, b) => new Date(b.published_date || b.scraped_date).getTime() - new Date(a.published_date || a.scraped_date).getTime(),
   );
-  const keptCount = articles.filter((article) => article.kept).length;
-  const totalScreened = latestReport?.total_articles_found ?? 0;
+  const releaseWindowHours = latestReport?.release_recent_window_hours ?? 24;
+  const failedSources = latestReport?.release_failed_sources ?? [];
   const today = new Date();
   const subtitle = `${today.toLocaleDateString('en-US', { weekday: 'long' })}, ${today.toLocaleDateString('en-US', {
     month: 'long',
     day: 'numeric',
   })} ${today.getFullYear()}`;
+
+  const formatRunTime = (value?: string | null): string => {
+    if (!value) {
+      return 'Not run yet';
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return 'Not available';
+    }
+    return parsed.toLocaleString();
+  };
 
   return (
     <section className="space-y-6">
@@ -59,26 +128,63 @@ export default function Dashboard() {
       {!loading && !error && !latestReport && (
         <div className="empty-state">
           <div className="empty-state-icon" />
-          <p>No reports yet. The pipeline runs daily at 7:00 AM UTC.</p>
+          <p>No reports yet. Run one of the pipeline actions to generate a report.</p>
         </div>
       )}
 
       {!loading && !error && latestReport && (
         <div className="space-y-5">
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-lg border border-[#222222] bg-[#111111] p-4">
+          <div className="grid gap-3 md:grid-cols-4">
+            <div className="rounded-lg border border-[#222222] bg-[#111111] p-4 text-center">
+              <p className="text-xs uppercase tracking-[0.08em] text-[#555555]">Pipeline Time</p>
+              <p className="mt-2 text-[11px] text-[#888888]">Articles: <span className="text-[#2563eb]">{formatRunTime(latestReport.articles_pipeline_ran_at)}</span></p>
+              <p className="mt-1 text-[11px] text-[#888888]">Releases: <span className="text-[#2563eb]">{formatRunTime(latestReport.releases_pipeline_ran_at)}</span></p>
+            </div>
+            <div className="rounded-lg border border-[#222222] bg-[#111111] p-4 text-center">
               <p className="text-xs uppercase tracking-[0.08em] text-[#555555]">Articles Screened</p>
               <p className="mt-2 font-mono text-2xl text-[#2563eb]">{latestReport.total_articles_found ?? 0}</p>
             </div>
-            <div className="rounded-lg border border-[#222222] bg-[#111111] p-4">
+            <div className="rounded-lg border border-[#222222] bg-[#111111] p-4 text-center">
               <p className="text-xs uppercase tracking-[0.08em] text-[#555555]">Articles Kept</p>
               <p className="mt-2 font-mono text-2xl text-[#2563eb]">{latestReport.total_articles_kept ?? 0}</p>
             </div>
-            <div className="rounded-lg border border-[#222222] bg-[#111111] p-4">
-              <p className="text-xs uppercase tracking-[0.08em] text-[#555555]">Pipeline Run</p>
-              <p className="mt-2 font-mono text-2xl text-[#2563eb]">
-                {new Date(latestReport.generated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </p>
+            <div className="rounded-lg border border-[#222222] bg-[#111111] p-4 text-center">
+              <p className="text-xs uppercase tracking-[0.08em] text-[#555555]">Pipeline Actions</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  className="rounded-md border border-[#333333] bg-[#1a1a1a] px-3 py-2 text-xs font-medium text-[#2563eb] transition-colors hover:bg-[#202020] disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={actionLoading !== ''}
+                  onClick={() => void runAction('all', runPipeline)}
+                >
+                  {actionLoading === 'all' ? 'Running...' : 'Run All'}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-[#333333] bg-[#1a1a1a] px-3 py-2 text-xs font-medium text-[#2563eb] transition-colors hover:bg-[#202020] disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={actionLoading !== ''}
+                  onClick={() => void runAction('articles', runArticlesPipeline)}
+                >
+                  {actionLoading === 'articles' ? 'Running...' : 'Run Articles'}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-[#333333] bg-[#1a1a1a] px-3 py-2 text-xs font-medium text-[#2563eb] transition-colors hover:bg-[#202020] disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={actionLoading !== ''}
+                  onClick={() => void runAction('releases', runReleasesPipeline)}
+                >
+                  {actionLoading === 'releases' ? 'Running...' : 'Run Releases'}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-[#333333] bg-[#1a1a1a] px-3 py-2 text-xs font-medium text-[#2563eb] transition-colors hover:bg-[#202020] disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={actionLoading !== ''}
+                  onClick={() => void runAction('reevaluate', runReevaluateTopStories)}
+                >
+                  {actionLoading === 'reevaluate' ? 'Running...' : 'Re-evaluate'}
+                </button>
+              </div>
+              {actionMessage && <p className="mt-2 text-[11px] text-[#888888]">{actionMessage}</p>}
             </div>
           </div>
 
@@ -109,25 +215,30 @@ export default function Dashboard() {
             </div>
 
             {view === 'top_stories' && (
-              <button
-                type="button"
-                className={`rounded-full border px-4 py-1.5 text-xs font-medium transition-colors ${
-                  showAllArticles
-                    ? 'border-[#2563eb] bg-[#2563eb] text-white'
-                    : 'border-[#333333] text-[#888888] hover:text-white'
-                }`}
-                onClick={() => setShowAllArticles((prev) => !prev)}
-              >
-                {showAllArticles ? 'Show kept only' : 'Show all articles'}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className={`rounded-full border px-4 py-1.5 text-xs font-medium transition-colors ${
+                    showAllArticles
+                      ? 'border-[#2563eb] bg-[#2563eb] text-white'
+                      : 'border-[#333333] text-[#888888] hover:text-white'
+                  }`}
+                  onClick={() => setShowAllArticles((prev) => !prev)}
+                >
+                  {showAllArticles ? 'Show kept only' : 'Show all articles'}
+                </button>
+                {showAllInfo && (
+                  <span className="rounded-full border border-[#f59e0b] bg-[#3f2f04] px-3 py-1 text-[11px] font-medium text-[#fcd34d]">
+                    SHOW ALL INFO on
+                  </span>
+                )}
+              </div>
             )}
           </div>
 
           {view === 'top_stories' && (
             <>
-              <p className="text-sm text-[#888888]">Showing {keptCount} kept / {totalScreened} total screened</p>
               <div className="space-y-2">
-                <p className="text-[11px] uppercase tracking-[0.1em] text-[#555555]">Intelligence Briefing</p>
                 <div className="rounded-lg border border-[#222222] bg-[#111111] p-4">
                   {latestReport.briefing ? (
                     <ReactMarkdown
@@ -161,8 +272,8 @@ export default function Dashboard() {
           )}
 
           {view === 'new_releases' && (
-            <div>
-              <p className="text-sm text-[#888888]">Latest company releases discovered in the last 24 hours</p>
+            <div className="space-y-3">
+              <p className="text-sm text-[#888888]">Latest company releases discovered in the last {releaseWindowHours} hours</p>
             </div>
           )}
         </div>
@@ -171,19 +282,44 @@ export default function Dashboard() {
       <div className="grid gap-3 md:grid-cols-2">
         {view === 'top_stories' &&
           articles.map((article) => (
-            <ArticleCard key={article.id} article={article} rejected={!article.kept} />
+            <ArticleCard key={article.id} article={article} rejected={!article.kept} showAllInfo={showAllInfo} />
           ))}
 
         {view === 'new_releases' &&
           releaseArticles.map((article) => (
-            <ArticleCard key={article.id} article={article} rejected={false} />
+            <ArticleCard key={article.id} article={article} rejected={false} compactRelease />
           ))}
       </div>
 
       {!loading && !error && view === 'new_releases' && releaseArticles.length === 0 && (
         <div className="empty-state">
           <div className="empty-state-icon" />
-          <p>No fresh releases found in the last 24h. Add more source pages in Settings.</p>
+          <p>No fresh releases found in the last {releaseWindowHours}h. Add more source pages in Settings.</p>
+        </div>
+      )}
+
+      {!loading && !error && latestReport && view === 'new_releases' && (
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-[0.08em] text-[#555555]">Failed to check</p>
+          {failedSources.length === 0 ? (
+            <p className="text-sm text-[#555555]">No failed sources in this releases run.</p>
+          ) : (
+            <ul className="space-y-1 text-sm text-[#fca5a5]">
+              {failedSources.map((item) => (
+                <li key={`${item.source_url}-${item.reason || 'unknown'}`}>
+                  <a
+                    href={item.source_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[#fca5a5] underline decoration-[#7f1d1d] underline-offset-2 hover:text-[#fecaca]"
+                  >
+                    {item.company_name}
+                  </a>{' '}
+                  <span className="text-[#fca5a5]/80">({item.reason || 'failed'})</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </section>

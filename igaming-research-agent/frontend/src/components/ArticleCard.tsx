@@ -6,10 +6,17 @@ import type { Article } from '@/types';
 interface Props {
   article: Article;
   rejected?: boolean;
+  showAllInfo?: boolean;
+  compactRelease?: boolean;
 }
 
 // TODO: Add score color scale and richer metadata chips.
-export default function ArticleCard({ article, rejected = false }: Props) {
+export default function ArticleCard({
+  article,
+  rejected = false,
+  showAllInfo = false,
+  compactRelease = false,
+}: Props) {
   const [feedbackMessage, setFeedbackMessage] = useState('');
   const [feedbackError, setFeedbackError] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -21,9 +28,24 @@ export default function ArticleCard({ article, rejected = false }: Props) {
     .map((tag) => tag.trim())
     .filter(Boolean);
 
-  const rejectionLabel = article.rejection_reason === 'failed_relevance_filter'
+  const reason = article.rejection_reason ?? '';
+  const freshnessReasons = new Set([
+    'Rejected: fail to check the date',
+    'invalid_published_date',
+    'missing_published_date',
+    'stale_published_date',
+    'future_published_date',
+  ]);
+
+  const rejectionLabel = reason === 'failed_relevance_filter'
     ? 'Rejected: failed relevance filter'
-    : `Rejected: low score (${score}/10)`;
+    : reason === 'score_below_threshold'
+      ? `Rejected: low score (${score}/10)`
+      : freshnessReasons.has(reason)
+        ? 'Rejected: invalid_published_date'
+        : reason
+          ? `Rejected: ${reason}`
+          : 'Rejected';
 
   const submitHelpful = async (): Promise<void> => {
     setFeedbackError('');
@@ -49,6 +71,36 @@ export default function ArticleCard({ article, rejected = false }: Props) {
     setFeedbackError('');
     setTimeout(() => setFeedbackMessage(''), 1500);
   };
+
+  if (compactRelease) {
+    const rawDate = article.published_date || article.scraped_date;
+    const formattedDate = rawDate
+      ? new Date(rawDate).toLocaleString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : 'Date unavailable';
+
+    return (
+      <article className="space-y-2.5 rounded-lg border border-[#222222] bg-[#111111] p-4 transition-all duration-150 ease-in-out hover:border-[#333333] hover:bg-[#151515]">
+        <p className="font-mono text-xs text-[#888888]">{formattedDate}</p>
+        <p className="text-xs uppercase tracking-[0.08em] text-[#2563eb]">
+          {article.source_domain || 'unknown source'}
+        </p>
+        <a
+          href={article.url}
+          target="_blank"
+          rel="noreferrer"
+          className="text-base font-semibold text-white hover:text-[#2563eb]"
+        >
+          {article.title}
+        </a>
+      </article>
+    );
+  }
 
   return (
     <article
@@ -123,7 +175,18 @@ export default function ArticleCard({ article, rejected = false }: Props) {
       </div>
 
       {rejected && (
-        <p className="text-[11px] text-[#dc2626]">{rejectionLabel}</p>
+        <div className="space-y-1">
+          <p className="text-[11px] text-[#dc2626]">{rejectionLabel}</p>
+          {article.rejection_detail && (
+            <p className="text-[11px] text-[#fca5a5]">{article.rejection_detail}</p>
+          )}
+          {article.rejection_score !== undefined && article.rejection_score !== null && (
+            <p className="text-[11px] text-[#fca5a5]">Score received: {article.rejection_score}/10</p>
+          )}
+          {showAllInfo && article.rejection_llm_why && (
+            <p className="text-[11px] text-[#fcd34d]">LLM why: {article.rejection_llm_why}</p>
+          )}
+        </div>
       )}
 
       <p className="mt-2 text-sm leading-6 text-[#888888]">{article.summary || 'No summary yet.'}</p>

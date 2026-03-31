@@ -60,6 +60,8 @@ class ReportSummaryOut(BaseModel):
     total_articles_kept: Optional[int] = None
     briefing: Optional[str] = None
     briefing_generated_at: Optional[datetime.datetime] = None
+    articles_pipeline_ran_at: Optional[datetime.datetime] = None
+    releases_pipeline_ran_at: Optional[datetime.datetime] = None
     generated_at: datetime.datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -128,3 +130,70 @@ class ReleaseSourceOut(ReleaseSourceBase):
     updated_at: Optional[datetime.datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class PromptTemplateVersionOut(BaseModel):
+    id: int
+    version: int
+    content: str
+    is_active: bool
+    created_at: datetime.datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PromptTemplateOut(BaseModel):
+    id: int
+    key: str
+    title: str
+    description: Optional[str] = None
+    draft_content: str
+    active_content: str
+    active_version: int
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PromptTemplateDetailOut(PromptTemplateOut):
+    history: list[PromptTemplateVersionOut] = []
+
+
+class PromptTemplateDraftUpdate(BaseModel):
+    draft_content: str = Field(..., min_length=1)
+
+
+class PromptTemplatePublishRequest(BaseModel):
+    content: Optional[str] = Field(default=None, min_length=1)
+
+
+class PipelineSettingsUpdate(BaseModel):
+    scheduler_hour: int = Field(..., ge=0, le=23)
+    scheduler_minute: int = Field(..., ge=0, le=59)
+    scheduler_timezone: str = Field(default="UTC", min_length=1, max_length=32)
+    release_recent_window_hours: int = Field(default=72, ge=1, le=24 * 30)
+
+
+class PipelineSettingsOut(PipelineSettingsUpdate):
+    id: int
+    updated_at: datetime.datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PipelineReevaluateOut(BaseModel):
+    status: str
+    message: str
+    report_id: int
+    processed_articles: int
+    updated_articles: int
+    kept_articles: int
+
+
+class LlmHealthOut(BaseModel):
+    status: str
+    provider: str
+    model: str
+    message: str
+    error_code: Optional[str] = None

@@ -2,7 +2,7 @@ name: Backend CI
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "scraper"]
     paths:
       - "igaming-research-agent/backend/**"
       - ".github/workflows/backend-ci.yml"

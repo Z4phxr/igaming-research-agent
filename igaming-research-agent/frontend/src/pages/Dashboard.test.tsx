@@ -47,6 +47,17 @@ describe('Dashboard', () => {
         },
       ],
     } as any);
+    vi.spyOn(apiService, 'runPipeline').mockResolvedValue({ status: 'success', message: 'Pipeline completed' } as any);
+    vi.spyOn(apiService, 'runArticlesPipeline').mockResolvedValue({ status: 'success', message: 'Articles pipeline completed' } as any);
+    vi.spyOn(apiService, 'runReleasesPipeline').mockResolvedValue({ status: 'success', message: 'Releases pipeline completed' } as any);
+    vi.spyOn(apiService, 'runReevaluateTopStories').mockResolvedValue({
+      status: 'success',
+      message: 'Top Stories re-evaluated using current published prompts',
+      report_id: 1,
+      processed_articles: 1,
+      updated_articles: 1,
+      kept_articles: 1,
+    } as any);
 
     const user = userEvent.setup();
     render(<Dashboard />);
@@ -56,7 +67,11 @@ describe('Dashboard', () => {
     await waitFor(() => {
       expect(screen.getByText(/articles screened/i)).toBeInTheDocument();
       expect(screen.getByText(/articles kept/i)).toBeInTheDocument();
-      expect(screen.getByText(/pipeline run/i)).toBeInTheDocument();
+      expect(screen.getByText(/pipeline actions/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /run all/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /run articles/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /run releases/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /re-evaluate/i })).toBeInTheDocument();
       expect(screen.getByText(/policy shift/i)).toBeInTheDocument();
     });
 

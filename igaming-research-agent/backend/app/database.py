@@ -276,7 +276,7 @@ DEFAULT_RELEASE_SOURCES: list[dict[str, str]] = [
     {
         "company_name": "Responsible Gambling Council",
         "category": "Org. branzowa",
-        "source_url": "https://www.responsiblegambling.org/news",
+        "source_url": "https://responsiblegambling.org/about-rgc/rgc-news/",
         "notes": "Responsible gaming standards US/CA",
     },
     {
@@ -323,8 +323,18 @@ def init_db() -> None:
     ensure_article_runtime_columns()
     ensure_report_runtime_columns()
     ensure_release_source_runtime_columns()
+    ensure_pipeline_settings_runtime_columns()
     ensure_app_migrations_table()
-    apply_release_source_data_migration()
+    ensure_prompt_templates_seeded()
+
+
+def ensure_prompt_templates_seeded() -> None:
+    """Create baseline prompt templates for prompt manager."""
+    from app.services.prompt_manager import ensure_default_prompt_templates
+
+    with SessionLocal() as session:
+        ensure_default_prompt_templates(session)
+        session.commit()
 
 
 def ensure_article_runtime_columns() -> None:
@@ -371,6 +381,10 @@ def ensure_report_runtime_columns() -> None:
         statements.append("ALTER TABLE reports ADD COLUMN briefing TEXT")
     if "briefing_generated_at" not in existing_columns:
         statements.append("ALTER TABLE reports ADD COLUMN briefing_generated_at TIMESTAMP")
+    if "articles_pipeline_ran_at" not in existing_columns:
+        statements.append("ALTER TABLE reports ADD COLUMN articles_pipeline_ran_at TIMESTAMP")
+    if "releases_pipeline_ran_at" not in existing_columns:
+        statements.append("ALTER TABLE reports ADD COLUMN releases_pipeline_ran_at TIMESTAMP")
 
     if not statements:
         return
@@ -437,6 +451,28 @@ def ensure_release_source_runtime_columns() -> None:
         connection.execute(text("UPDATE release_sources SET health_score = 100 WHERE health_score IS NULL OR health_score < 0"))
         connection.execute(text("UPDATE release_sources SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"))
         connection.execute(text("UPDATE release_sources SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL"))
+
+
+def ensure_pipeline_settings_runtime_columns() -> None:
+    """Backfill PipelineSettings columns for existing databases without migrations."""
+    inspector = inspect(engine)
+    if "pipeline_settings" not in inspector.get_table_names():
+        return
+
+    existing_columns = {column["name"] for column in inspector.get_columns("pipeline_settings")}
+    statements: list[str] = []
+    if "release_recent_window_hours" not in existing_columns:
+        statements.append("ALTER TABLE pipeline_settings ADD COLUMN release_recent_window_hours INTEGER NOT NULL DEFAULT 72")
+
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+        connection.execute(
+            text(
+                "UPDATE pipeline_settings SET release_recent_window_hours = 72 "
+                "WHERE release_recent_window_hours IS NULL OR release_recent_window_hours < 1"
+            )
+        )
 
 
 def ensure_app_migrations_table() -> None:
@@ -573,14 +609,21 @@ def apply_release_source_data_migration() -> None:
         # Build a canonical, de-duplicated defaults map (last value wins for same URL).
         defaults_by_canonical: dict[str, dict[str, str]] = {}
         for source in DEFAULT_RELEASE_SOURCES:
-            canonical = _canonical_release_source_url(source["source_url"])
+            source_url = str(source.get("source_url") or "")
+            company_name = str(source.get("company_name") or "").strip()
+            category = str(source.get("category") or "").strip()
+            notes = str(source.get("notes") or "")
+            if not source_url or not company_name or not category:
+                continue
+
+            canonical = _canonical_release_source_url(source_url)
             if not canonical:
                 continue
             defaults_by_canonical[canonical] = {
-                "company_name": source["company_name"],
-                "category": source["category"],
+                "company_name": company_name,
+                "category": category,
                 "source_url": canonical,
-                "notes": source["notes"],
+                "notes": notes,
             }
 
         for canonical, source in defaults_by_canonical.items():

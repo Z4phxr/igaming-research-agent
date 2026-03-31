@@ -95,8 +95,8 @@ def test_run_analysis_pipeline_filters_and_sorts(monkeypatch):
         "https://b": {**articles[1], "score": 5, "summary": "sum", "tags": "technology"},
     }
 
-    monkeypatch.setattr(analyzer, "is_relevant", lambda article: relevance[article["url"]])
-    monkeypatch.setattr(analyzer, "score_and_summarize", lambda article: scored.get(article["url"]))
+    monkeypatch.setattr(analyzer, "is_relevant", lambda article, db=None: relevance[article["url"]])
+    monkeypatch.setattr(analyzer, "score_and_summarize", lambda article, db=None: scored.get(article["url"]))
 
     result = analyzer.run_analysis_pipeline(articles)
 
@@ -125,3 +125,68 @@ def test_score_and_summarize_returns_none_on_parse_error(monkeypatch):
     )
 
     assert result is None
+
+
+def test_build_rejection_metadata_for_scoring_threshold():
+    metadata = analyzer.build_rejection_metadata(
+        {
+            "rejection_reason": "score_below_threshold",
+            "score": 4,
+            "raw_score": 4,
+        }
+    )
+
+    assert metadata["rejection_stage"] == "scoring"
+    assert metadata["rejection_score"] == 4
+    assert "below keep threshold" in metadata["rejection_detail"]
+    assert metadata["rejection_llm_why"] is None
+
+
+def test_build_rejection_metadata_for_invalid_published_date_alias():
+    metadata = analyzer.build_rejection_metadata(
+        {
+            "rejection_reason": "invalid_published_date",
+            "score": 0,
+            "raw_score": 0,
+        }
+    )
+
+    assert metadata["rejection_stage"] == "freshness"
+    assert "published date" in metadata["rejection_detail"].lower()
+    assert metadata["rejection_score"] is None
+
+
+def test_build_rejection_metadata_calls_llm_only_when_enabled(monkeypatch):
+    calls = {"count": 0}
+
+    def fake_create(**kwargs):
+        calls["count"] += 1
+        assert kwargs["model"] == analyzer._MODEL
+        return MockCompletionResponse("The article lacked a US regulatory or business trigger.")
+
+    monkeypatch.setattr(analyzer.anthropic_client.messages, "create", fake_create)
+
+    disabled = analyzer.build_rejection_metadata(
+        {
+            "title": "Some title",
+            "snippet": "Some snippet",
+            "full_text": "Some text",
+            "url": "https://example.com/rejected",
+            "rejection_reason": "failed_relevance_filter",
+        },
+        include_llm_why=False,
+    )
+    enabled = analyzer.build_rejection_metadata(
+        {
+            "title": "Some title",
+            "snippet": "Some snippet",
+            "full_text": "Some text",
+            "url": "https://example.com/rejected",
+            "rejection_reason": "failed_relevance_filter",
+        },
+        include_llm_why=True,
+    )
+
+    assert disabled["rejection_llm_why"] is None
+    assert enabled["rejection_llm_why"] is not None
+    assert calls["count"] == 1

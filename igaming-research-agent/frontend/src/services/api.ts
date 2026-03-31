@@ -3,8 +3,13 @@ import type {
   CreateQueryDto,
   CreateReleaseSourceDto,
   FeedbackType,
+  PromptTemplate,
+  PromptTemplateDetail,
+  PromptTemplateVersion,
   Query,
   ReleaseSource,
+  ReleaseSourceHealthCheckResponse,
+  SingleReleaseSourceHealthCheckResponse,
   Report,
   UpdateQueryDto,
   UpdateReleaseSourceDto,
@@ -28,6 +33,14 @@ export const api = axios.create({
 
 function getApiErrorMessage(error: unknown, fallback: string): string {
   if (axios.isAxiosError(error)) {
+    if (error.code === 'ECONNABORTED' || String(error.message || '').toLowerCase().includes('timeout')) {
+      return 'Request timed out while waiting for backend health-check response. The source may be slow; try again in a moment.';
+    }
+
+    if (!error.response) {
+      return 'Cannot reach backend API. Check if Docker/Desktop backend is running and API proxy is available.';
+    }
+
     const responseData = error.response?.data as
       | { detail?: string | { message?: string }; message?: string }
       | string
@@ -70,10 +83,11 @@ export async function getReports(): Promise<Report[]> {
   }
 }
 
-export async function getLatestReport(showAll: boolean = false): Promise<Report | null> {
+export async function getLatestReport(showAll: boolean = false, showAllInfo: boolean = false): Promise<Report | null> {
   try {
     const { data } = await api.get<Report>('/reports/latest', {
-      params: { show_all: showAll },
+      params: { show_all: showAll, show_all_info: showAllInfo },
+      timeout: showAllInfo ? 60000 : undefined,
     });
     return data;
   } catch (error) {
@@ -84,9 +98,12 @@ export async function getLatestReport(showAll: boolean = false): Promise<Report 
   }
 }
 
-export async function getReportById(id: number): Promise<Report> {
+export async function getReportById(id: number, showAll: boolean = false, showAllInfo: boolean = false): Promise<Report> {
   try {
-    const { data } = await api.get<Report>(`/reports/${id}`);
+    const { data } = await api.get<Report>(`/reports/${id}`, {
+      params: { show_all: showAll, show_all_info: showAllInfo },
+      timeout: showAllInfo ? 60000 : undefined,
+    });
     return data;
   } catch (error) {
     throw new Error(getApiErrorMessage(error, 'Failed to fetch report details.'));
@@ -160,6 +177,34 @@ export async function deleteReleaseSource(id: number): Promise<void> {
     await api.delete(`/release-sources/${id}`);
   } catch (error) {
     throw new Error(getApiErrorMessage(error, 'Failed to delete release source.'));
+  }
+}
+
+export async function runReleaseSourceHealthCheck(): Promise<ReleaseSourceHealthCheckResponse> {
+  try {
+    const { data } = await api.post<ReleaseSourceHealthCheckResponse>(
+      '/release-sources/health-check',
+      {},
+      { timeout: 120000 },
+    );
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to run release source health check.'));
+  }
+}
+
+export async function runSingleReleaseSourceHealthCheck(
+  sourceId: number,
+): Promise<SingleReleaseSourceHealthCheckResponse> {
+  try {
+    const { data } = await api.post<SingleReleaseSourceHealthCheckResponse>(
+      `/release-sources/health-check/${sourceId}`,
+      {},
+      { timeout: 45000 },
+    );
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to run release source health check for selected company.'));
   }
 }
 
@@ -253,5 +298,120 @@ export async function runReleasesPipeline(): Promise<{ status: string; message: 
       }
     }
     throw new Error(getApiErrorMessage(error, 'Failed to run releases pipeline.'));
+  }
+}
+
+export async function getPromptTemplates(): Promise<PromptTemplate[]> {
+  try {
+    const { data } = await api.get<PromptTemplate[]>('/prompts');
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to fetch prompt templates.'));
+  }
+}
+
+export async function getPromptTemplate(promptKey: string): Promise<PromptTemplateDetail> {
+  try {
+    const { data } = await api.get<PromptTemplateDetail>(`/prompts/${promptKey}`);
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to fetch prompt template details.'));
+  }
+}
+
+export async function updatePromptDraft(promptKey: string, draftContent: string): Promise<PromptTemplate> {
+  try {
+    const { data } = await api.put<PromptTemplate>(`/prompts/${promptKey}/draft`, {
+      draft_content: draftContent,
+    });
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to save prompt draft.'));
+  }
+}
+
+export async function publishPrompt(promptKey: string, content?: string): Promise<PromptTemplate> {
+  try {
+    const payload = content ? { content } : {};
+    const { data } = await api.post<PromptTemplate>(`/prompts/${promptKey}/publish`, payload);
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to publish prompt.'));
+  }
+}
+
+export async function getPromptHistory(promptKey: string): Promise<PromptTemplateVersion[]> {
+  try {
+    const { data } = await api.get<PromptTemplateVersion[]>(`/prompts/${promptKey}/history`);
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to fetch prompt history.'));
+  }
+}
+
+export interface PipelineSettings {
+  id: number;
+  scheduler_hour: number;
+  scheduler_minute: number;
+  scheduler_timezone: string;
+  release_recent_window_hours: number;
+  updated_at: string;
+}
+
+export interface PipelineReevaluateResult {
+  status: string;
+  message: string;
+  report_id: number;
+  processed_articles: number;
+  updated_articles: number;
+  kept_articles: number;
+}
+
+export interface LlmHealthResult {
+  status: string;
+  provider: string;
+  model: string;
+  message: string;
+  error_code?: string | null;
+}
+
+export async function getPipelineSettings(): Promise<PipelineSettings> {
+  try {
+    const { data } = await api.get<PipelineSettings>('/pipeline-settings');
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to fetch pipeline settings.'));
+  }
+}
+
+export async function updatePipelineSettings(settings: {
+  scheduler_hour: number;
+  scheduler_minute: number;
+  scheduler_timezone?: string;
+  release_recent_window_hours: number;
+}): Promise<PipelineSettings> {
+  try {
+    const { data } = await api.put<PipelineSettings>('/pipeline-settings', settings);
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to update pipeline settings.'));
+  }
+}
+
+export async function runReevaluateTopStories(): Promise<PipelineReevaluateResult> {
+  try {
+    const { data } = await api.post<PipelineReevaluateResult>('/reports/run/reevaluate', {}, { timeout: 300000 });
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to re-evaluate Top Stories.'));
+  }
+}
+
+export async function getLlmHealth(): Promise<LlmHealthResult> {
+  try {
+    const { data } = await api.get<LlmHealthResult>('/pipeline-settings/llm-health');
+    return data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to run LLM health check.'));
   }
 }

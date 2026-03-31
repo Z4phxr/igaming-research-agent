@@ -1,0 +1,81 @@
+"""CRUD endpoints for pipeline configuration settings.
+
+TODO: Add role-based access control for settings updates.
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.models import PipelineSettings as PipelineSettingsModel
+from app.schemas import LlmHealthOut, PipelineSettingsOut, PipelineSettingsUpdate
+from app.services.analyzer import check_llm_connection
+from app.services.scheduler import refresh_scheduler
+
+router = APIRouter()
+
+
+def _ensure_settings_exist(db: Session) -> PipelineSettingsModel:
+    """Ensure a settings row exists; create with defaults if missing."""
+    settings = db.query(PipelineSettingsModel).first()
+    if not settings:
+        settings = PipelineSettingsModel(
+            scheduler_hour=7,
+            scheduler_minute=0,
+            scheduler_timezone="UTC",
+            release_recent_window_hours=72,
+        )
+        db.add(settings)
+        db.commit()
+        db.refresh(settings)
+    elif int(getattr(settings, "release_recent_window_hours", 0) or 0) < 1:
+        settings.release_recent_window_hours = 72
+        db.commit()
+        db.refresh(settings)
+    return settings
+
+
+@router.get("", response_model=PipelineSettingsOut)
+def get_pipeline_settings(db: Session = Depends(get_db)):
+    """Get current pipeline settings."""
+    settings = _ensure_settings_exist(db)
+    return settings
+
+
+@router.put("", response_model=PipelineSettingsOut)
+def update_pipeline_settings(
+    payload: PipelineSettingsUpdate,
+    db: Session = Depends(get_db),
+):
+    """Update pipeline settings (scheduler time, timezone, etc.)."""
+    settings = _ensure_settings_exist(db)
+
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(settings, key, value)
+
+    db.commit()
+    db.refresh(settings)
+
+    # Log the update for debugging
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info(
+        "Pipeline settings updated: %02d:%02d %s release_window=%sh",
+        settings.scheduler_hour,
+        settings.scheduler_minute,
+        settings.scheduler_timezone,
+        settings.release_recent_window_hours,
+    )
+
+    refresh_scheduler()
+
+    return settings
+
+
+@router.get("/llm-health", response_model=LlmHealthOut)
+def get_llm_health():
+    """Check LLM provider connectivity and configured model availability."""
+    return check_llm_connection()
+
+

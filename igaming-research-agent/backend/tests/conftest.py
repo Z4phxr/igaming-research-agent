@@ -8,12 +8,14 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+# Ensure required env vars exist before importing app modules.
+os.environ.setdefault("DATABASE_URL", "sqlite:///./test.db")
+os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
+
 import app.main as main_module
 from app.database import Base, get_db
 from app.main import app
 from app.models import Query
-
-os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
 
 
 @pytest.fixture()

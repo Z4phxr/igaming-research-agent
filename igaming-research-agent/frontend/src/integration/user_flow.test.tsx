@@ -61,6 +61,34 @@ describe('integration user flow', () => {
     });
     vi.spyOn(apiService, 'updateQuery').mockResolvedValue({} as any);
     vi.spyOn(apiService, 'deleteQuery').mockResolvedValue();
+    vi.spyOn(apiService, 'getPromptTemplates').mockResolvedValue([
+      {
+        id: 1,
+        key: 'analyzer.relevance_system',
+        title: 'Analyzer Relevance System Prompt',
+        description: 'desc',
+        draft_content: 'draft',
+        active_content: 'active',
+        active_version: 1,
+        created_at: '2026-03-22T00:00:00Z',
+        updated_at: '2026-03-22T00:00:00Z',
+      },
+    ] as any);
+    vi.spyOn(apiService, 'getPromptTemplate').mockResolvedValue({
+      id: 1,
+      key: 'analyzer.relevance_system',
+      title: 'Analyzer Relevance System Prompt',
+      description: 'desc',
+      draft_content: 'draft',
+      active_content: 'active',
+      active_version: 1,
+      created_at: '2026-03-22T00:00:00Z',
+      updated_at: '2026-03-22T00:00:00Z',
+      history: [],
+    } as any);
+    vi.spyOn(apiService, 'getPromptHistory').mockResolvedValue([] as any);
+    vi.spyOn(apiService, 'updatePromptDraft').mockResolvedValue({} as any);
+    vi.spyOn(apiService, 'publishPrompt').mockResolvedValue({} as any);
     vi.spyOn(apiService, 'getReports').mockImplementation(async () => [...reports]);
     vi.spyOn(apiService, 'getLatestReport').mockImplementation(async () => reports[0] as any);
     vi.spyOn(apiService, 'getReportById').mockImplementation(async (id: number) => {

@@ -25,18 +25,33 @@ export interface Article {
   kept: boolean;
   rejection_reason: string | null;
   passed_relevance_filter: boolean;
+  rejection_stage?: string | null;
+  rejection_score?: number | null;
+  rejection_detail?: string | null;
+  rejection_llm_why?: string | null;
+}
+
+export interface ReleaseFailedSource {
+  company_name: string;
+  source_url: string;
+  reason: string | null;
+  checked_at: string | null;
 }
 
 export interface Report {
   id: number;
   report_date: string;
   generated_at: string;
+  articles_pipeline_ran_at?: string | null;
+  releases_pipeline_ran_at?: string | null;
   total_articles_found: number;
   total_articles_kept: number;
   briefing?: string | null;
   briefing_generated_at?: string | null;
   articles: Article[];
   release_articles?: Article[];
+  release_recent_window_hours?: number;
+  release_failed_sources?: ReleaseFailedSource[];
 }
 
 export interface ReleaseSource {
@@ -45,9 +60,47 @@ export interface ReleaseSource {
   category: string;
   source_url: string;
   notes?: string | null;
+  source_tier?: number;
+  preferred_method?: string;
+  crawl_delay_seconds?: number;
+  max_requests_per_hour?: number;
+  consecutive_failures?: number;
+  health_score?: number;
+  quarantine_until?: string | null;
+  last_failure_reason?: string | null;
+  last_success_at?: string | null;
+  last_listing_checked_at?: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface ReleaseSourceHealthCheckResult {
+  source_id: number;
+  company_name: string;
+  source_url: string;
+  passed: boolean;
+  latest_article_url: string | null;
+  latest_article_title: string | null;
+  latest_article_published_at: string | null;
+  latest_article_age_hours: number | null;
+  error_log: string | null;
+  checked_at: string;
+}
+
+export interface ReleaseSourceHealthCheckResponse {
+  status: string;
+  checked_at: string;
+  total_sources: number;
+  passed_sources: number;
+  failed_sources: number;
+  results: ReleaseSourceHealthCheckResult[];
+}
+
+export interface SingleReleaseSourceHealthCheckResponse {
+  status: string;
+  checked_at: string;
+  result: ReleaseSourceHealthCheckResult;
 }
 
 export interface CreateReleaseSourceDto {
@@ -87,4 +140,28 @@ export interface ArticleFeedback {
   feedback_type: FeedbackType;
   user_corrected_score: number | null;
   created_at: string;
+}
+
+export interface PromptTemplateVersion {
+  id: number;
+  version: number;
+  content: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface PromptTemplate {
+  id: number;
+  key: string;
+  title: string;
+  description: string | null;
+  draft_content: string;
+  active_content: string;
+  active_version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PromptTemplateDetail extends PromptTemplate {
+  history: PromptTemplateVersion[];
 }
