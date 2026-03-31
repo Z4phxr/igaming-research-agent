@@ -62,9 +62,9 @@ describe('api service', () => {
     await getReportById(7);
 
     expect(spy).toHaveBeenCalledWith('/reports');
-    expect(spy).toHaveBeenCalledWith('/reports/latest', { params: { show_all: false } });
-    expect(spy).toHaveBeenCalledWith('/reports/latest', { params: { show_all: true } });
-    expect(spy).toHaveBeenCalledWith('/reports/7');
+    expect(spy).toHaveBeenCalledWith('/reports/latest', { params: { show_all: false, show_all_info: false } });
+    expect(spy).toHaveBeenCalledWith('/reports/latest', { params: { show_all: true, show_all_info: false } });
+    expect(spy).toHaveBeenCalledWith('/reports/7', { params: { show_all: false, show_all_info: false } });
     spy.mockRestore();
   });
 
