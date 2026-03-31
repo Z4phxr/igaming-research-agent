@@ -7,10 +7,16 @@ interface Props {
   article: Article;
   rejected?: boolean;
   showAllInfo?: boolean;
+  compactRelease?: boolean;
 }
 
 // TODO: Add score color scale and richer metadata chips.
-export default function ArticleCard({ article, rejected = false, showAllInfo = false }: Props) {
+export default function ArticleCard({
+  article,
+  rejected = false,
+  showAllInfo = false,
+  compactRelease = false,
+}: Props) {
   const [feedbackMessage, setFeedbackMessage] = useState('');
   const [feedbackError, setFeedbackError] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -65,6 +71,36 @@ export default function ArticleCard({ article, rejected = false, showAllInfo = f
     setFeedbackError('');
     setTimeout(() => setFeedbackMessage(''), 1500);
   };
+
+  if (compactRelease) {
+    const rawDate = article.published_date || article.scraped_date;
+    const formattedDate = rawDate
+      ? new Date(rawDate).toLocaleString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : 'Date unavailable';
+
+    return (
+      <article className="space-y-2 rounded-lg border border-[#222222] bg-[#111111] p-4 transition-all duration-150 ease-in-out hover:border-[#333333] hover:bg-[#151515]">
+        <p className="font-mono text-xs text-[#888888]">{formattedDate}</p>
+        <p className="text-xs uppercase tracking-[0.08em] text-[#2563eb]">
+          {article.source_domain || 'unknown source'}
+        </p>
+        <a
+          href={article.url}
+          target="_blank"
+          rel="noreferrer"
+          className="text-base font-semibold text-white hover:text-[#2563eb]"
+        >
+          {article.title}
+        </a>
+      </article>
+    );
+  }
 
   return (
     <article

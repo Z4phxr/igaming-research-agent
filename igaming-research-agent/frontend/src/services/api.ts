@@ -87,6 +87,7 @@ export async function getLatestReport(showAll: boolean = false, showAllInfo: boo
   try {
     const { data } = await api.get<Report>('/reports/latest', {
       params: { show_all: showAll, show_all_info: showAllInfo },
+      timeout: showAllInfo ? 60000 : undefined,
     });
     return data;
   } catch (error) {
@@ -101,6 +102,7 @@ export async function getReportById(id: number, showAll: boolean = false, showAl
   try {
     const { data } = await api.get<Report>(`/reports/${id}`, {
       params: { show_all: showAll, show_all_info: showAllInfo },
+      timeout: showAllInfo ? 60000 : undefined,
     });
     return data;
   } catch (error) {

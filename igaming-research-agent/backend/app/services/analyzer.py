@@ -30,7 +30,7 @@ anthropic_client = Anthropic(api_key=_anthropic_api_key)
 # Cost optimization: Haiku used for simple classification
 # and structured output tasks. Sonnet reserved for
 # narrative generation in report_generator.py only.
-_MODEL = os.getenv("ANTHROPIC_ANALYZER_MODEL", "claude-3-5-haiku-latest").strip() or "claude-3-5-haiku-latest"
+_MODEL = os.getenv("ANTHROPIC_ANALYZER_MODEL", "claude-3-5-haiku-20241022").strip() or "claude-3-5-haiku-20241022"
 
 _RELEVANCE_SYSTEM_PROMPT_FALLBACK = """
 You are a strict content filter for a USA iGaming research agent.
@@ -406,6 +406,10 @@ def _explain_rejection_with_llm(article: dict, metadata: dict, db: Session | Non
         output = response.content[0].text.strip() if response.content else ""
         return output or None
     except Exception as exc:
+        # If model id is not available for this key/account, fail open quietly
+        # so report loading is not blocked by optional explanation calls.
+        if "not_found_error" in str(exc) or "model:" in str(exc):
+            return None
         logger.warning(
             "Rejection explanation failed for url=%s model=%s error=%s",
             item.get("url", ""),

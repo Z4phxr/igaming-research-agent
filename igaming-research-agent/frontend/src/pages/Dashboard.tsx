@@ -137,11 +137,11 @@ export default function Dashboard() {
       {!loading && !error && latestReport && (
         <div className="space-y-5">
           <div className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-lg border border-[#222222] bg-[#111111] p-4">
+            <div className="rounded-lg border border-[#222222] bg-[#111111] p-4 text-center">
               <p className="text-xs uppercase tracking-[0.08em] text-[#555555]">Articles Screened</p>
               <p className="mt-2 font-mono text-2xl text-[#2563eb]">{latestReport.total_articles_found ?? 0}</p>
             </div>
-            <div className="rounded-lg border border-[#222222] bg-[#111111] p-4">
+            <div className="rounded-lg border border-[#222222] bg-[#111111] p-4 text-center">
               <p className="text-xs uppercase tracking-[0.08em] text-[#555555]">Articles Kept</p>
               <p className="mt-2 font-mono text-2xl text-[#2563eb]">{latestReport.total_articles_kept ?? 0}</p>
             </div>
@@ -152,7 +152,7 @@ export default function Dashboard() {
                   type="button"
                   onClick={() => void handleRunPipelineAction('all')}
                   disabled={runningAction !== null}
-                  className="rounded border border-[#2563eb] bg-[#1d4ed8] px-2 py-1.5 text-xs font-medium text-white hover:bg-[#1e40af] disabled:opacity-50"
+                  className="rounded border border-[#333333] bg-[#0f0f0f] px-2 py-1.5 text-xs font-medium text-[#2563eb] hover:bg-[#1a1a1a] disabled:opacity-50"
                 >
                   {runningAction === 'all' ? 'Running...' : 'Run All'}
                 </button>
@@ -160,7 +160,7 @@ export default function Dashboard() {
                   type="button"
                   onClick={() => void handleRunPipelineAction('articles')}
                   disabled={runningAction !== null}
-                  className="rounded border border-[#2563eb] bg-[#1d4ed8] px-2 py-1.5 text-xs font-medium text-white hover:bg-[#1e40af] disabled:opacity-50"
+                  className="rounded border border-[#333333] bg-[#0f0f0f] px-2 py-1.5 text-xs font-medium text-[#2563eb] hover:bg-[#1a1a1a] disabled:opacity-50"
                 >
                   {runningAction === 'articles' ? 'Running...' : 'Run Articles'}
                 </button>
@@ -168,7 +168,7 @@ export default function Dashboard() {
                   type="button"
                   onClick={() => void handleRunPipelineAction('releases')}
                   disabled={runningAction !== null}
-                  className="rounded border border-[#15803d] bg-[#16a34a] px-2 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:opacity-50"
+                  className="rounded border border-[#333333] bg-[#0f0f0f] px-2 py-1.5 text-xs font-medium text-[#2563eb] hover:bg-[#1a1a1a] disabled:opacity-50"
                 >
                   {runningAction === 'releases' ? 'Running...' : 'Run Releases'}
                 </button>
@@ -176,7 +176,7 @@ export default function Dashboard() {
                   type="button"
                   onClick={() => void handleRunPipelineAction('reevaluate')}
                   disabled={runningAction !== null}
-                  className="rounded border border-[#a16207] bg-[#ca8a04] px-2 py-1.5 text-xs font-medium text-black hover:bg-[#a16207] disabled:opacity-50"
+                  className="rounded border border-[#333333] bg-[#0f0f0f] px-2 py-1.5 text-xs font-medium text-[#2563eb] hover:bg-[#1a1a1a] disabled:opacity-50"
                 >
                   {runningAction === 'reevaluate' ? 'Running...' : 'Re-evaluate'}
                 </button>
@@ -288,7 +288,7 @@ export default function Dashboard() {
 
         {view === 'new_releases' &&
           releaseArticles.map((article) => (
-            <ArticleCard key={article.id} article={article} rejected={false} />
+            <ArticleCard key={article.id} article={article} rejected={false} compactRelease />
           ))}
       </div>
 
