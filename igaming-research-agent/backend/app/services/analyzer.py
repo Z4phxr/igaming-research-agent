@@ -88,6 +88,17 @@ CRITICAL: If article mentions bill number (SB/HB/AB) + committee/vote, minimum s
 If federal agency (CFTC/DOJ/SEC) takes action, minimum score is 8.
 """
 
+_REJECTION_EXPLAIN_SYSTEM_PROMPT = """
+You explain why an article was rejected in an iGaming research pipeline.
+Be specific, concise, and factual.
+
+Rules:
+- Return 1-2 short sentences only.
+- Mention the stage (relevance or scoring).
+- Mention the concrete trigger (e.g., non-US focus, no policy/business signal, score below 6, malformed scoring output).
+- Do not mention model internals or policies.
+"""
+
 _PRIORITY_KEYWORDS = [
     "sb ",
     "hb ",
@@ -207,6 +218,119 @@ def _safe_article(article: dict) -> dict:
         "url": str(article.get("url", "")),
         "source_domain": str(article.get("source_domain", "")),
     }
+
+
+def _parse_score(article: dict) -> int:
+    """Extract integer score from an article-like dict safely."""
+    raw = article.get("raw_score", article.get("score", 0))
+    try:
+        return int(raw or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _base_rejection_metadata(article: dict) -> dict:
+    """Build deterministic rejection metadata without additional LLM cost."""
+    reason = str(article.get("rejection_reason") or "unknown_rejection")
+    score = _parse_score(article)
+
+    if reason == "failed_relevance_filter":
+        return {
+            "rejection_stage": "relevance",
+            "rejection_score": None,
+            "rejection_detail": "Rejected in relevance stage: article did not satisfy the strict USA iGaming relevance gate.",
+        }
+
+    if reason == "score_below_threshold":
+        if score >= 1:
+            return {
+                "rejection_stage": "scoring",
+                "rejection_score": score,
+                "rejection_detail": f"Rejected in scoring stage: score {score}/10 is below keep threshold 6/10.",
+            }
+        return {
+            "rejection_stage": "scoring",
+            "rejection_score": 0,
+            "rejection_detail": "Rejected in scoring stage: scoring failed before a valid numeric score was produced.",
+        }
+
+    if reason == "Rejected: fail to check the date":
+        return {
+            "rejection_stage": "freshness",
+            "rejection_score": None,
+            "rejection_detail": "Rejected in freshness stage: failed to parse or validate article published date.",
+        }
+
+    if reason == "stale_published_date":
+        return {
+            "rejection_stage": "freshness",
+            "rejection_score": None,
+            "rejection_detail": "Rejected in freshness stage: published date is older than the 24-hour window.",
+        }
+
+    if reason == "future_published_date":
+        return {
+            "rejection_stage": "freshness",
+            "rejection_score": None,
+            "rejection_detail": "Rejected in freshness stage: published date is in the future.",
+        }
+
+    return {
+        "rejection_stage": "pipeline",
+        "rejection_score": score if score > 0 else None,
+        "rejection_detail": f"Rejected: {reason}.",
+    }
+
+
+def _explain_rejection_with_llm(article: dict, metadata: dict) -> Optional[str]:
+    """Return optional LLM explanation for rejected article when explicitly enabled."""
+    stage = str(metadata.get("rejection_stage") or "pipeline")
+    if stage not in {"relevance", "scoring"}:
+        return None
+
+    item = _safe_article(article)
+    reason = str(article.get("rejection_reason") or "unknown")
+    score = metadata.get("rejection_score")
+    content = _extract_key_content(item, max_chars=1200)
+
+    prompt = (
+        f"Stage: {stage}\n"
+        f"Reason code: {reason}\n"
+        f"Score: {score}\n"
+        f"Title: {item['title']}\n"
+        f"Snippet: {item['snippet']}\n"
+        f"Content: {content}"
+    )
+
+    try:
+        response = anthropic_client.messages.create(
+            model=_MODEL,
+            max_tokens=120,
+            temperature=0,
+            system=_REJECTION_EXPLAIN_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        output = response.content[0].text.strip() if response.content else ""
+        return output or None
+    except Exception as exc:
+        logger.warning(
+            "Rejection explanation failed for url=%s model=%s error=%s",
+            item.get("url", ""),
+            _MODEL,
+            exc,
+        )
+        return None
+
+
+def build_rejection_metadata(article: dict, include_llm_why: bool = False) -> dict:
+    """Create rejection metadata for UI cards, with optional LLM explanation."""
+    metadata = _base_rejection_metadata(article)
+    metadata["rejection_llm_why"] = None
+
+    if include_llm_why:
+        metadata["rejection_llm_why"] = _explain_rejection_with_llm(article, metadata)
+
+    return metadata
 
 
 def is_relevant(article: dict) -> bool:

@@ -25,6 +25,10 @@ export interface Article {
   kept: boolean;
   rejection_reason: string | null;
   passed_relevance_filter: boolean;
+  rejection_stage?: string | null;
+  rejection_score?: number | null;
+  rejection_detail?: string | null;
+  rejection_llm_why?: string | null;
 }
 
 export interface Report {

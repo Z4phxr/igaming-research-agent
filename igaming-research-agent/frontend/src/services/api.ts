@@ -80,10 +80,10 @@ export async function getReports(): Promise<Report[]> {
   }
 }
 
-export async function getLatestReport(showAll: boolean = false): Promise<Report | null> {
+export async function getLatestReport(showAll: boolean = false, showAllInfo: boolean = false): Promise<Report | null> {
   try {
     const { data } = await api.get<Report>('/reports/latest', {
-      params: { show_all: showAll },
+      params: { show_all: showAll, show_all_info: showAllInfo },
     });
     return data;
   } catch (error) {
@@ -94,9 +94,11 @@ export async function getLatestReport(showAll: boolean = false): Promise<Report 
   }
 }
 
-export async function getReportById(id: number): Promise<Report> {
+export async function getReportById(id: number, showAll: boolean = false, showAllInfo: boolean = false): Promise<Report> {
   try {
-    const { data } = await api.get<Report>(`/reports/${id}`);
+    const { data } = await api.get<Report>(`/reports/${id}`, {
+      params: { show_all: showAll, show_all_info: showAllInfo },
+    });
     return data;
   } catch (error) {
     throw new Error(getApiErrorMessage(error, 'Failed to fetch report details.'));

@@ -12,13 +12,14 @@ from app.models import Article as ArticleModel
 from app.models import ArticleFeedback as ArticleFeedbackModel
 from app.models import Report as ReportModel
 from app.schemas import ArticleFeedbackCreate, ReportSummaryOut
+from app.services.analyzer import build_rejection_metadata
 from app.services.scheduler import run_articles_pipeline, run_daily_pipeline, run_release_pipeline
 
 router = APIRouter()
 feedback_router = APIRouter()
 
 
-def _serialize_report(report: ReportModel, show_all: bool) -> dict:
+def _serialize_report(report: ReportModel, show_all: bool, show_all_info: bool) -> dict:
     top_story_articles = [
         article
         for article in report.articles
@@ -38,7 +39,7 @@ def _serialize_report(report: ReportModel, show_all: bool) -> dict:
     )
 
     def _serialize_article(article: ArticleModel) -> dict:
-        return {
+        payload = {
             "id": article.id,
             "title": article.title,
             "url": article.url,
@@ -57,6 +58,11 @@ def _serialize_report(report: ReportModel, show_all: bool) -> dict:
             "scraped_date": article.scraped_date,
             "created_at": article.created_at,
         }
+
+        if not bool(article.kept):
+            payload.update(build_rejection_metadata(payload, include_llm_why=show_all_info))
+
+        return payload
 
     return {
         "id": report.id,
@@ -178,7 +184,7 @@ def run_releases_only_pipeline(db: Session = Depends(get_db)):
 
 
 @router.get("/latest")
-def get_latest_report(show_all: bool = False, db: Session = Depends(get_db)):
+def get_latest_report(show_all: bool = False, show_all_info: bool = False, db: Session = Depends(get_db)):
     report = (
         db.query(ReportModel)
         .options(selectinload(ReportModel.articles))
@@ -187,11 +193,11 @@ def get_latest_report(show_all: bool = False, db: Session = Depends(get_db)):
     )
     if report is None:
         raise HTTPException(status_code=404, detail="No reports found")
-    return _serialize_report(report, show_all=show_all)
+    return _serialize_report(report, show_all=show_all, show_all_info=show_all_info)
 
 
 @router.get("/{report_id}")
-def get_report(report_id: int, show_all: bool = False, db: Session = Depends(get_db)):
+def get_report(report_id: int, show_all: bool = False, show_all_info: bool = False, db: Session = Depends(get_db)):
     report = (
         db.query(ReportModel)
         .options(selectinload(ReportModel.articles))
@@ -200,7 +206,7 @@ def get_report(report_id: int, show_all: bool = False, db: Session = Depends(get
     )
     if report is None:
         raise HTTPException(status_code=404, detail="Report not found")
-    return _serialize_report(report, show_all=show_all)
+    return _serialize_report(report, show_all=show_all, show_all_info=show_all_info)
 
 
 @feedback_router.post("/articles/{article_id}/feedback")

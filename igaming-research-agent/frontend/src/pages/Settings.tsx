@@ -26,6 +26,7 @@ type SettingsView = 'queries' | 'sources' | 'health';
 
 export default function Settings() {
   const [activeView, setActiveView] = useState<SettingsView>('queries');
+  const [showAllInfo, setShowAllInfo] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [runningArticlesPipeline, setRunningArticlesPipeline] = useState(false);
@@ -52,6 +53,32 @@ export default function Settings() {
   const [notes, setNotes] = useState('');
   const [savingSourceId, setSavingSourceId] = useState<number | null>(null);
 
+  const readShowAllInfoSetting = (): boolean => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    const storageLike = window.localStorage as { getItem?: (key: string) => string | null } | undefined;
+    if (!storageLike || typeof storageLike.getItem !== 'function') {
+      return false;
+    }
+
+    return storageLike.getItem('show_all_info') === 'true';
+  };
+
+  const writeShowAllInfoSetting = (value: boolean): void => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const storageLike = window.localStorage as { setItem?: (key: string, value: string) => void } | undefined;
+    if (!storageLike || typeof storageLike.setItem !== 'function') {
+      return;
+    }
+
+    storageLike.setItem('show_all_info', String(value));
+  };
+
   const loadQueries = async () => {
     setLoading(true);
     try {
@@ -76,9 +103,16 @@ export default function Settings() {
   };
 
   useEffect(() => {
+    setShowAllInfo(readShowAllInfoSetting());
+
     void loadQueries();
     void loadReleaseSources();
   }, []);
+
+  const handleToggleShowAllInfo = (checked: boolean): void => {
+    setShowAllInfo(checked);
+    writeShowAllInfoSetting(checked);
+  };
 
   const resetForm = (): void => {
     setSearchTerm('');
@@ -733,6 +767,31 @@ export default function Settings() {
 
   return (
     <section className="space-y-5">
+      <div className="rounded-lg border border-[#4b3a0b] bg-[#17130a] p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-[#fcd34d]">SHOW ALL INFO</p>
+            <p className="mt-1 text-xs text-[#fef3c7]">
+              When enabled, dashboard rejected cards request extra LLM "why failed" details. This increases API cost.
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="toggle-show-all-info"
+            onClick={() => handleToggleShowAllInfo(!showAllInfo)}
+            className={`h-6 w-11 rounded-full border p-0.5 transition-colors ${
+              showAllInfo ? 'border-[#f59e0b] bg-[#f59e0b]' : 'border-[#333333] bg-[#1a1a1a]'
+            }`}
+          >
+            <span
+              className={`block h-4 w-4 rounded-full bg-white transition-transform ${
+                showAllInfo ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+      </div>
+
       <div className="flex flex-wrap gap-2 rounded-lg border border-[#222222] bg-[#0f0f0f] p-2">
         <TabButton active={activeView === 'queries'} onClick={() => setActiveView('queries')}>
           Query Manager

@@ -10,15 +10,43 @@ export default function Dashboard() {
   const [latestReport, setLatestReport] = useState<Report | null>(null);
   const [view, setView] = useState<DashboardView>('top_stories');
   const [showAllArticles, setShowAllArticles] = useState(false);
+  const [showAllInfo, setShowAllInfo] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+
+  const readShowAllInfoSetting = (): boolean => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    const storageLike = window.localStorage as { getItem?: (key: string) => string | null } | undefined;
+    if (!storageLike || typeof storageLike.getItem !== 'function') {
+      return false;
+    }
+
+    return storageLike.getItem('show_all_info') === 'true';
+  };
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const readSetting = (): void => {
+      setShowAllInfo(readShowAllInfoSetting());
+    };
+
+    readSetting();
+    window.addEventListener('storage', readSetting);
+    return () => window.removeEventListener('storage', readSetting);
+  }, []);
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       setError(false);
       try {
-        const report = await getLatestReport(showAllArticles);
+        const report = await getLatestReport(showAllArticles, showAllInfo);
         setLatestReport(report);
       } catch {
         setError(true);
@@ -28,7 +56,7 @@ export default function Dashboard() {
     };
 
     void load();
-  }, [showAllArticles]);
+  }, [showAllArticles, showAllInfo]);
 
   const articles = [...(latestReport?.articles ?? [])].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
   const releaseArticles = [...(latestReport?.release_articles ?? [])].sort(
@@ -109,17 +137,24 @@ export default function Dashboard() {
             </div>
 
             {view === 'top_stories' && (
-              <button
-                type="button"
-                className={`rounded-full border px-4 py-1.5 text-xs font-medium transition-colors ${
-                  showAllArticles
-                    ? 'border-[#2563eb] bg-[#2563eb] text-white'
-                    : 'border-[#333333] text-[#888888] hover:text-white'
-                }`}
-                onClick={() => setShowAllArticles((prev) => !prev)}
-              >
-                {showAllArticles ? 'Show kept only' : 'Show all articles'}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className={`rounded-full border px-4 py-1.5 text-xs font-medium transition-colors ${
+                    showAllArticles
+                      ? 'border-[#2563eb] bg-[#2563eb] text-white'
+                      : 'border-[#333333] text-[#888888] hover:text-white'
+                  }`}
+                  onClick={() => setShowAllArticles((prev) => !prev)}
+                >
+                  {showAllArticles ? 'Show kept only' : 'Show all articles'}
+                </button>
+                {showAllInfo && (
+                  <span className="rounded-full border border-[#f59e0b] bg-[#3f2f04] px-3 py-1 text-[11px] font-medium text-[#fcd34d]">
+                    SHOW ALL INFO on
+                  </span>
+                )}
+              </div>
             )}
           </div>
 
@@ -171,7 +206,7 @@ export default function Dashboard() {
       <div className="grid gap-3 md:grid-cols-2">
         {view === 'top_stories' &&
           articles.map((article) => (
-            <ArticleCard key={article.id} article={article} rejected={!article.kept} />
+            <ArticleCard key={article.id} article={article} rejected={!article.kept} showAllInfo={showAllInfo} />
           ))}
 
         {view === 'new_releases' &&

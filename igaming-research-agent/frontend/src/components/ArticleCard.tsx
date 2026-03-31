@@ -6,10 +6,11 @@ import type { Article } from '@/types';
 interface Props {
   article: Article;
   rejected?: boolean;
+  showAllInfo?: boolean;
 }
 
 // TODO: Add score color scale and richer metadata chips.
-export default function ArticleCard({ article, rejected = false }: Props) {
+export default function ArticleCard({ article, rejected = false, showAllInfo = false }: Props) {
   const [feedbackMessage, setFeedbackMessage] = useState('');
   const [feedbackError, setFeedbackError] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -23,7 +24,9 @@ export default function ArticleCard({ article, rejected = false }: Props) {
 
   const rejectionLabel = article.rejection_reason === 'failed_relevance_filter'
     ? 'Rejected: failed relevance filter'
-    : `Rejected: low score (${score}/10)`;
+    : article.rejection_reason === 'Rejected: fail to check the date'
+      ? 'Rejected: fail to check the date'
+      : `Rejected: low score (${score}/10)`;
 
   const submitHelpful = async (): Promise<void> => {
     setFeedbackError('');
@@ -123,7 +126,18 @@ export default function ArticleCard({ article, rejected = false }: Props) {
       </div>
 
       {rejected && (
-        <p className="text-[11px] text-[#dc2626]">{rejectionLabel}</p>
+        <div className="space-y-1">
+          <p className="text-[11px] text-[#dc2626]">{rejectionLabel}</p>
+          {article.rejection_detail && (
+            <p className="text-[11px] text-[#fca5a5]">{article.rejection_detail}</p>
+          )}
+          {article.rejection_score !== undefined && article.rejection_score !== null && (
+            <p className="text-[11px] text-[#fca5a5]">Score received: {article.rejection_score}/10</p>
+          )}
+          {showAllInfo && article.rejection_llm_why && (
+            <p className="text-[11px] text-[#fcd34d]">LLM why: {article.rejection_llm_why}</p>
+          )}
+        </div>
       )}
 
       <p className="mt-2 text-sm leading-6 text-[#888888]">{article.summary || 'No summary yet.'}</p>
