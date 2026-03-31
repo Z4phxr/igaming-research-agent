@@ -19,9 +19,8 @@ export default function Dashboard() {
   const [showAllInfo, setShowAllInfo] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [runningAction, setRunningAction] = useState<'all' | 'articles' | 'releases' | 'reevaluate' | null>(null);
+  const [actionLoading, setActionLoading] = useState<'' | 'all' | 'articles' | 'releases' | 'reevaluate'>('');
   const [actionMessage, setActionMessage] = useState('');
-  const [actionError, setActionError] = useState('');
 
   const readShowAllInfoSetting = (): boolean => {
     if (typeof window === 'undefined') {
@@ -67,37 +66,25 @@ export default function Dashboard() {
     void load();
   }, [showAllArticles, showAllInfo]);
 
-  const refreshLatestReport = async () => {
+  const refreshLatestReport = async (): Promise<void> => {
     const report = await getLatestReport(showAllArticles, showAllInfo);
     setLatestReport(report);
   };
 
-  const handleRunPipelineAction = async (action: 'all' | 'articles' | 'releases' | 'reevaluate') => {
-    setRunningAction(action);
-    setActionError('');
+  const runAction = async (
+    kind: 'all' | 'articles' | 'releases' | 'reevaluate',
+    action: () => Promise<{ message?: string }>,
+  ): Promise<void> => {
+    setActionLoading(kind);
     setActionMessage('');
     try {
-      let message = '';
-      if (action === 'all') {
-        const result = await runPipeline();
-        message = result.message;
-      } else if (action === 'articles') {
-        const result = await runArticlesPipeline();
-        message = result.message;
-      } else if (action === 'releases') {
-        const result = await runReleasesPipeline();
-        message = result.message;
-      } else {
-        const result = await runReevaluateTopStories();
-        message = result.message;
-      }
-
-      setActionMessage(message);
+      const result = await action();
       await refreshLatestReport();
-    } catch (runError) {
-      setActionError(runError instanceof Error ? runError.message : 'Unable to run selected pipeline action.');
+      setActionMessage(result.message || 'Action completed successfully.');
+    } catch (err) {
+      setActionMessage(err instanceof Error ? err.message : 'Action failed.');
     } finally {
-      setRunningAction(null);
+      setActionLoading('');
     }
   };
 
@@ -130,7 +117,7 @@ export default function Dashboard() {
       {!loading && !error && !latestReport && (
         <div className="empty-state">
           <div className="empty-state-icon" />
-          <p>No reports yet. The pipeline runs daily at 7:00 AM UTC.</p>
+          <p>No reports yet. Run one of the pipeline actions to generate a report.</p>
         </div>
       )}
 
@@ -150,42 +137,40 @@ export default function Dashboard() {
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() => void handleRunPipelineAction('all')}
-                  disabled={runningAction !== null}
-                  className="rounded border border-[#333333] bg-[#0f0f0f] px-2 py-1.5 text-xs font-medium text-[#2563eb] hover:bg-[#1a1a1a] disabled:opacity-50"
+                  className="rounded-md border border-[#333333] bg-[#1a1a1a] px-3 py-2 text-xs font-medium text-[#2563eb] transition-colors hover:bg-[#202020] disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={actionLoading !== ''}
+                  onClick={() => void runAction('all', runPipeline)}
                 >
-                  {runningAction === 'all' ? 'Running...' : 'Run All'}
+                  {actionLoading === 'all' ? 'Running...' : 'Run All'}
                 </button>
                 <button
                   type="button"
-                  onClick={() => void handleRunPipelineAction('articles')}
-                  disabled={runningAction !== null}
-                  className="rounded border border-[#333333] bg-[#0f0f0f] px-2 py-1.5 text-xs font-medium text-[#2563eb] hover:bg-[#1a1a1a] disabled:opacity-50"
+                  className="rounded-md border border-[#333333] bg-[#1a1a1a] px-3 py-2 text-xs font-medium text-[#2563eb] transition-colors hover:bg-[#202020] disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={actionLoading !== ''}
+                  onClick={() => void runAction('articles', runArticlesPipeline)}
                 >
-                  {runningAction === 'articles' ? 'Running...' : 'Run Articles'}
+                  {actionLoading === 'articles' ? 'Running...' : 'Run Articles'}
                 </button>
                 <button
                   type="button"
-                  onClick={() => void handleRunPipelineAction('releases')}
-                  disabled={runningAction !== null}
-                  className="rounded border border-[#333333] bg-[#0f0f0f] px-2 py-1.5 text-xs font-medium text-[#2563eb] hover:bg-[#1a1a1a] disabled:opacity-50"
+                  className="rounded-md border border-[#333333] bg-[#1a1a1a] px-3 py-2 text-xs font-medium text-[#2563eb] transition-colors hover:bg-[#202020] disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={actionLoading !== ''}
+                  onClick={() => void runAction('releases', runReleasesPipeline)}
                 >
-                  {runningAction === 'releases' ? 'Running...' : 'Run Releases'}
+                  {actionLoading === 'releases' ? 'Running...' : 'Run Releases'}
                 </button>
                 <button
                   type="button"
-                  onClick={() => void handleRunPipelineAction('reevaluate')}
-                  disabled={runningAction !== null}
-                  className="rounded border border-[#333333] bg-[#0f0f0f] px-2 py-1.5 text-xs font-medium text-[#2563eb] hover:bg-[#1a1a1a] disabled:opacity-50"
+                  className="rounded-md border border-[#333333] bg-[#1a1a1a] px-3 py-2 text-xs font-medium text-[#2563eb] transition-colors hover:bg-[#202020] disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={actionLoading !== ''}
+                  onClick={() => void runAction('reevaluate', runReevaluateTopStories)}
                 >
-                  {runningAction === 'reevaluate' ? 'Running...' : 'Re-evaluate'}
+                  {actionLoading === 'reevaluate' ? 'Running...' : 'Re-evaluate'}
                 </button>
               </div>
+              {actionMessage && <p className="mt-2 text-[11px] text-[#888888]">{actionMessage}</p>}
             </div>
           </div>
-
-          {actionMessage && <p className="text-sm text-[#16a34a]">{actionMessage}</p>}
-          {actionError && <p className="text-sm text-[#dc2626]">{actionError}</p>}
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="inline-flex items-center rounded-full border border-[#333333] bg-[#0f0f0f] p-1">
