@@ -21,7 +21,7 @@ anthropic_client = Anthropic(api_key=_anthropic_api_key)
 # Cost optimization: Haiku used for simple classification
 # and structured output tasks. Sonnet reserved for
 # narrative generation in report_generator.py only.
-_MODEL = "claude-haiku-4-5-20251001"
+_MODEL = os.getenv("ANTHROPIC_ANALYZER_MODEL", "claude-3-5-haiku-latest").strip() or "claude-3-5-haiku-latest"
 
 _RELEVANCE_SYSTEM_PROMPT = """
 You are a strict content filter for a USA iGaming research agent.
@@ -228,7 +228,12 @@ def is_relevant(article: dict) -> bool:
         content = response.content[0].text.strip() if response.content else ""
         return "YES" in content.upper()
     except Exception as exc:
-        logger.warning("Relevance check failed for url=%s error=%s", item.get("url", ""), exc)
+        logger.warning(
+            "Relevance check failed for url=%s model=%s error=%s",
+            item.get("url", ""),
+            _MODEL,
+            exc,
+        )
         return False
 
 
@@ -265,7 +270,12 @@ def score_and_summarize(article: dict | str) -> Optional[dict]:
             messages=[{"role": "user", "content": user_message}],
         )
     except Exception as exc:
-        logger.warning("Scoring failed for url=%s error=%s", item.get("url", ""), exc)
+        logger.warning(
+            "Scoring failed for url=%s model=%s error=%s",
+            item.get("url", ""),
+            _MODEL,
+            exc,
+        )
         return None
 
     raw = response.content[0].text.strip() if response.content else ""

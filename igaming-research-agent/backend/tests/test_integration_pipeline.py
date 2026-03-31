@@ -108,7 +108,82 @@ def test_pipeline_rejects_article_missing_published_date(monkeypatch):
     assert report.total_articles_found == 1
     assert report.total_articles_kept == 0
     assert article is not None
-    assert article.rejection_reason == "missing_published_date"
+    assert article.rejection_reason == "Rejected: fail to check the date"
     assert article.kept is False
     assert article.published_date is None
+    verify.close()
+
+
+def test_pipeline_accepts_relative_published_date(monkeypatch):
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    test_session_local = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+    Base.metadata.create_all(bind=engine)
+
+    monkeypatch.setattr(scheduler, "SessionLocal", test_session_local)
+    monkeypatch.setattr(
+        scheduler,
+        "run_search_pipeline",
+        lambda db: [
+            {
+                "title": "Relative date item",
+                "url": "https://example.com/relative-date",
+                "snippet": "x",
+                "published_date": "2 hours ago",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        scheduler,
+        "scrape_articles",
+        lambda articles: [{**articles[0], "full_text": "Article body " * 50, "source_domain": "example.com"}],
+    )
+
+    called = {"analyze": 0}
+
+    def fake_run_analysis_pipeline(articles):
+        called["analyze"] += 1
+        assert len(articles) == 1
+        return {
+            "final_articles": [
+                {
+                    **articles[0],
+                    "score": 7,
+                    "raw_score": 7,
+                    "summary": "Relevant summary",
+                    "tags": "regulation",
+                    "passed_relevance_filter": True,
+                    "kept": True,
+                    "rejection_reason": None,
+                }
+            ],
+            "all_articles": [
+                {
+                    **articles[0],
+                    "score": 7,
+                    "raw_score": 7,
+                    "summary": "Relevant summary",
+                    "tags": "regulation",
+                    "passed_relevance_filter": True,
+                    "kept": True,
+                    "rejection_reason": None,
+                }
+            ],
+        }
+
+    monkeypatch.setattr(scheduler, "run_analysis_pipeline", fake_run_analysis_pipeline)
+
+    scheduler.run_daily_pipeline()
+
+    verify = test_session_local()
+    report = verify.query(scheduler.Report).first()
+    article = verify.query(scheduler.Article).first()
+
+    assert called["analyze"] == 1
+    assert report is not None
+    assert report.total_articles_found == 1
+    assert report.total_articles_kept == 1
+    assert article is not None
+    assert article.rejection_reason is None
+    assert article.kept is True
+    assert article.published_date is not None
     verify.close()

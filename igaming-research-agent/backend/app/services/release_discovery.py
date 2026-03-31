@@ -37,6 +37,13 @@ _SOURCE_LISTING_TIMEOUT_OVERRIDES_SECONDS = {
     "investors.pennentertainment.com": 90,
     "www.ballys.com": 60,
 }
+_SOURCE_TLS_INSECURE_HOSTS = {
+    "newsroom.playags.com",
+}
+_SOURCE_LISTING_JINA_FALLBACK_HOSTS = {
+    "www.catenamedia.com",
+    "catenamedia.com",
+}
 
 
 def _new_source_stats(source: ReleaseSource) -> dict:
@@ -170,6 +177,28 @@ def _listing_url_candidates(source_url: str) -> list[str]:
         deduped.append(token)
         seen.add(token)
     return deduped
+
+
+def _request_verify_for_url(url: str) -> bool:
+    """Return TLS verification mode for a source URL."""
+    host = (urlparse(url or "").netloc or "").lower()
+    return host not in _SOURCE_TLS_INSECURE_HOSTS
+
+
+def _should_try_jina_listing_fallback(url: str, stage: str, error_kind: str) -> bool:
+    if error_kind != "http_403":
+        return False
+    if not str(stage or "").startswith("listing_fetch"):
+        return False
+    host = (urlparse(url or "").netloc or "").lower()
+    return host in _SOURCE_LISTING_JINA_FALLBACK_HOSTS
+
+
+def _fetch_html_via_jina(url: str, timeout: int, headers: dict[str, str]) -> tuple[str, int]:
+    jina_url = f"https://r.jina.ai/{url}"
+    response = requests.get(jina_url, timeout=timeout, headers=headers)
+    response.raise_for_status()
+    return response.text, int(response.status_code)
 
 
 def _discover_from_feed_xml(
@@ -417,6 +446,7 @@ def _fetch_html(
     retries = max(0, retries)
 
     headers = {"User-Agent": settings.release_fetch_user_agent}
+    verify = _request_verify_for_url(url)
 
     attempt = 0
     started = time.perf_counter()
@@ -427,7 +457,7 @@ def _fetch_html(
     while attempt <= retries:
         request_started = time.perf_counter()
         try:
-            response = requests.get(url, timeout=timeout, headers=headers)
+            response = requests.get(url, timeout=timeout, headers=headers, verify=verify)
             response.raise_for_status()
             duration_ms = int((time.perf_counter() - started) * 1000)
             return response.text, {
@@ -441,6 +471,27 @@ def _fetch_html(
             last_error_kind, last_status_code = _classify_request_error(exc)
             last_error_message = str(exc)
             attempt_duration_ms = int((time.perf_counter() - request_started) * 1000)
+
+            if _should_try_jina_listing_fallback(url=url, stage=stage, error_kind=last_error_kind):
+                try:
+                    jina_html, jina_status = _fetch_html_via_jina(url=url, timeout=timeout, headers=headers)
+                    duration_ms = int((time.perf_counter() - started) * 1000)
+                    return jina_html, {
+                        "ok": True,
+                        "error_kind": "success",
+                        "status_code": jina_status,
+                        "duration_ms": duration_ms,
+                        "retries_used": attempt,
+                    }
+                except requests.RequestException as jina_exc:
+                    logger.info(
+                        "listing_jina_fallback_failed page_url=%s stage=%s primary_error=%s fallback_error=%s",
+                        url,
+                        stage,
+                        last_error_message,
+                        str(jina_exc),
+                    )
+
             should_retry = attempt < retries and _is_retryable_error(last_error_kind, last_status_code)
 
             if should_retry:

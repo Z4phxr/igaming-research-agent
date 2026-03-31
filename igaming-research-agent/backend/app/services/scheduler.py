@@ -6,6 +6,7 @@ TODO: Add robust logging/telemetry and retry strategy per step.
 
 import datetime
 import logging
+import re
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -21,6 +22,7 @@ from app.services.search import run_search_pipeline
 
 logger = logging.getLogger(__name__)
 _scheduler = BackgroundScheduler(timezone="UTC")
+DATE_CHECK_FAILED_REASON = "Rejected: fail to check the date"
 
 
 def _normalize_utc_naive(value: datetime.datetime) -> datetime.datetime:
@@ -30,7 +32,41 @@ def _normalize_utc_naive(value: datetime.datetime) -> datetime.datetime:
     return value.astimezone(datetime.timezone.utc).replace(tzinfo=None)
 
 
-def _parse_published_date(value: object) -> datetime.datetime | None:
+def _parse_relative_datetime(raw: str, now_utc: datetime.datetime) -> datetime.datetime | None:
+    """Parse common relative datetime phrases from news providers.
+
+    Examples: "2 hours ago", "15 minutes ago", "yesterday".
+    """
+    lower = raw.strip().lower()
+    if not lower:
+        return None
+
+    if lower in {"yesterday", "1 day ago"}:
+        return now_utc - datetime.timedelta(days=1)
+
+    match = re.match(r"^(\d+)\s+(minute|minutes|hour|hours|day|days|week|weeks)\s+ago$", lower)
+    if not match:
+        return None
+
+    amount = int(match.group(1))
+    unit = match.group(2)
+
+    if "minute" in unit:
+        return now_utc - datetime.timedelta(minutes=amount)
+    if "hour" in unit:
+        return now_utc - datetime.timedelta(hours=amount)
+    if "day" in unit:
+        return now_utc - datetime.timedelta(days=amount)
+    if "week" in unit:
+        return now_utc - datetime.timedelta(weeks=amount)
+
+    return None
+
+
+def _parse_published_date(
+    value: object,
+    now_utc: datetime.datetime | None = None,
+) -> datetime.datetime | None:
     """Parse provider published_date values into naive UTC datetime."""
     if value is None:
         return None
@@ -48,6 +84,11 @@ def _parse_published_date(value: object) -> datetime.datetime | None:
     if not raw:
         return None
 
+    reference_now = now_utc or datetime.datetime.utcnow()
+    relative = _parse_relative_datetime(raw, reference_now)
+    if relative is not None:
+        return _normalize_utc_naive(relative)
+
     iso_candidates = [raw]
     if raw.endswith("Z"):
         iso_candidates.append(raw[:-1] + "+00:00")
@@ -60,6 +101,13 @@ def _parse_published_date(value: object) -> datetime.datetime | None:
             pass
 
     for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%d-%m-%Y", "%d/%m/%Y"):
+        try:
+            parsed = datetime.datetime.strptime(raw, fmt)
+            return _normalize_utc_naive(parsed)
+        except ValueError:
+            continue
+
+    for fmt in ("%b %d, %Y", "%B %d, %Y", "%b %d %Y", "%B %d %Y"):
         try:
             parsed = datetime.datetime.strptime(raw, fmt)
             return _normalize_utc_naive(parsed)
@@ -93,12 +141,12 @@ def _split_recent_articles(
     for article in articles:
         raw_value = article.get("published_date")
         if raw_value is None or (isinstance(raw_value, str) and not raw_value.strip()):
-            rejected.append(_reject_article(article, "missing_published_date"))
+            rejected.append(_reject_article(article, DATE_CHECK_FAILED_REASON))
             continue
 
-        published_at = _parse_published_date(raw_value)
+        published_at = _parse_published_date(raw_value, now_utc=now_utc)
         if published_at is None:
-            rejected.append(_reject_article(article, "invalid_published_date"))
+            rejected.append(_reject_article(article, DATE_CHECK_FAILED_REASON))
             continue
 
         if published_at > now_utc:
@@ -235,6 +283,12 @@ def run_articles_pipeline(db: Session | None = None, raise_on_error: bool = Fals
             len(recent_articles),
             len(freshness_rejections),
         )
+        if freshness_rejections:
+            rejection_breakdown: dict[str, int] = {}
+            for item in freshness_rejections:
+                reason = str(item.get("rejection_reason") or "unknown")
+                rejection_breakdown[reason] = rejection_breakdown.get(reason, 0) + 1
+            logger.info("Articles pipeline freshness rejections by reason: %s", rejection_breakdown)
         if not recent_articles:
             logger.warning("Daily pipeline freshness gate rejected all scraped articles")
 

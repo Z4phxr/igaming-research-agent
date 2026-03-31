@@ -83,6 +83,74 @@ def test_fetch_html_does_not_retry_404(monkeypatch):
     assert calls["count"] == 1
 
 
+def test_fetch_html_uses_insecure_tls_for_ags_host_only(monkeypatch):
+    calls: list[dict] = []
+
+    def fake_get(url, *args, **kwargs):
+        calls.append({"url": url, "verify": kwargs.get("verify")})
+        return _FakeResponse(200, "<html>ok</html>")
+
+    monkeypatch.setattr(release_discovery.requests, "get", fake_get)
+
+    html_ags, meta_ags = release_discovery._fetch_html(
+        "https://newsroom.playags.com",
+        source_name="AGS",
+        stage="listing_fetch",
+        timeout=1,
+        max_retries=0,
+    )
+    html_other, meta_other = release_discovery._fetch_html(
+        "https://example.com/news",
+        source_name="Example",
+        stage="listing_fetch",
+        timeout=1,
+        max_retries=0,
+    )
+
+    assert html_ags == "<html>ok</html>"
+    assert meta_ags["ok"] is True
+    assert html_other == "<html>ok</html>"
+    assert meta_other["ok"] is True
+    assert calls[0]["url"] == "https://newsroom.playags.com"
+    assert calls[0]["verify"] is False
+    assert calls[1]["url"] == "https://example.com/news"
+    assert calls[1]["verify"] is True
+
+
+def test_fetch_html_uses_jina_fallback_for_catenamedia_listing_403(monkeypatch):
+    calls: list[str] = []
+
+    def fake_get(url, *args, **kwargs):
+        calls.append(url)
+        if url == "https://www.catenamedia.com/investors/press-releases":
+            return _FakeResponse(403, "forbidden")
+        if url == "https://r.jina.ai/https://www.catenamedia.com/investors/press-releases":
+            return _FakeResponse(
+                200,
+                "<html><a href='https://www.catenamedia.com/release/example-release/'>Example release</a></html>",
+            )
+        return _FakeResponse(404, "not found")
+
+    monkeypatch.setattr(release_discovery.requests, "get", fake_get)
+
+    html, meta = release_discovery._fetch_html(
+        "https://www.catenamedia.com/investors/press-releases",
+        source_name="Catena Media",
+        stage="listing_fetch",
+        timeout=1,
+        max_retries=0,
+    )
+
+    assert html is not None
+    assert "example-release" in html
+    assert meta["ok"] is True
+    assert meta["error_kind"] == "success"
+    assert calls == [
+        "https://www.catenamedia.com/investors/press-releases",
+        "https://r.jina.ai/https://www.catenamedia.com/investors/press-releases",
+    ]
+
+
 def test_discover_recent_releases_source_timeout_is_non_fatal(monkeypatch):
     db = _build_session()
     try:
