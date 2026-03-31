@@ -1208,7 +1208,7 @@ export default function Settings() {
   );
 
   return (
-    <section className="space-y-5">
+    <section className="space-y-5 flex flex-wrap justify-center gap-4">
       <div className="flex flex-wrap gap-2 rounded-lg border border-[#222222] bg-[#0f0f0f] p-2">
         <TabButton active={activeView === 'queries'} onClick={() => setActiveView('queries')}>
           Query Manager

@@ -59,7 +59,7 @@ describe('History', () => {
       expect(screen.getByText('2026-03-02')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText(/view report/i));
+    await user.click(screen.getByText('2026-03-02'));
 
     await waitFor(() => {
       expect(screen.getByText(/executive summary/i)).toBeInTheDocument();
