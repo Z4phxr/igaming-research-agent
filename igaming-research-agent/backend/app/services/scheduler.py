@@ -8,6 +8,7 @@ import datetime
 import email.utils
 import logging
 import re
+from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -24,6 +25,21 @@ from app.services.search import run_search_pipeline
 logger = logging.getLogger(__name__)
 _scheduler = BackgroundScheduler(timezone="UTC")
 DATE_CHECK_FAILED_REASON = "Rejected: fail to check the date"
+
+_US_TIMEZONE_BY_ABBR = {
+    "ET": "America/New_York",
+    "EST": "America/New_York",
+    "EDT": "America/New_York",
+    "CT": "America/Chicago",
+    "CST": "America/Chicago",
+    "CDT": "America/Chicago",
+    "MT": "America/Denver",
+    "MST": "America/Denver",
+    "MDT": "America/Denver",
+    "PT": "America/Los_Angeles",
+    "PST": "America/Los_Angeles",
+    "PDT": "America/Los_Angeles",
+}
 
 
 def _normalize_utc_naive(value: datetime.datetime) -> datetime.datetime:
@@ -64,6 +80,45 @@ def _parse_relative_datetime(raw: str, now_utc: datetime.datetime) -> datetime.d
     return None
 
 
+def _parse_named_timezone_datetime(raw: str) -> datetime.datetime | None:
+    """Parse datetime strings ending with common timezone abbreviations.
+
+    Example: "Mar 30, 2026, 09:00 AM ET"
+    """
+    match = re.match(r"^(?P<base>.+?)\s+(?P<tz>[A-Za-z]{2,4})$", raw.strip())
+    if not match:
+        return None
+
+    base_value = match.group("base").strip().rstrip(",")
+    tz_token = match.group("tz").upper()
+
+    if tz_token in {"UTC", "GMT"}:
+        tzinfo = datetime.timezone.utc
+    else:
+        timezone_name = _US_TIMEZONE_BY_ABBR.get(tz_token)
+        if not timezone_name:
+            return None
+        tzinfo = ZoneInfo(timezone_name)
+
+    for fmt in (
+        "%b %d, %Y, %I:%M %p",
+        "%B %d, %Y, %I:%M %p",
+        "%b %d %Y %I:%M %p",
+        "%B %d %Y %I:%M %p",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y/%m/%d %H:%M:%S",
+        "%Y/%m/%d %H:%M",
+    ):
+        try:
+            parsed = datetime.datetime.strptime(base_value, fmt)
+            return _normalize_utc_naive(parsed.replace(tzinfo=tzinfo))
+        except ValueError:
+            continue
+
+    return None
+
+
 def _parse_published_date(
     value: object,
     now_utc: datetime.datetime | None = None,
@@ -90,6 +145,10 @@ def _parse_published_date(
     if relative is not None:
         return _normalize_utc_naive(relative)
 
+    named_tz_parsed = _parse_named_timezone_datetime(raw)
+    if named_tz_parsed is not None:
+        return named_tz_parsed
+
     iso_candidates = [raw]
     if raw.endswith("Z"):
         iso_candidates.append(raw[:-1] + "+00:00")
@@ -110,6 +169,22 @@ def _parse_published_date(
         pass
 
     for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%d-%m-%Y", "%d/%m/%Y"):
+        try:
+            parsed = datetime.datetime.strptime(raw, fmt)
+            return _normalize_utc_naive(parsed)
+        except ValueError:
+            continue
+
+    for fmt in (
+        "%b %d, %Y, %I:%M %p",
+        "%B %d, %Y, %I:%M %p",
+        "%b %d %Y %I:%M %p",
+        "%B %d %Y %I:%M %p",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y/%m/%d %H:%M:%S",
+        "%Y/%m/%d %H:%M",
+    ):
         try:
             parsed = datetime.datetime.strptime(raw, fmt)
             return _normalize_utc_naive(parsed)
