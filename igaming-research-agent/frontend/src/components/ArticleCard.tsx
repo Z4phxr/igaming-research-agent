@@ -10,6 +10,45 @@ interface Props {
   compactRelease?: boolean;
 }
 
+function hasExplicitTimezone(iso: string): boolean {
+  return /Z$/i.test(iso) || /[+-]\d{2}:?\d{2}$/.test(iso);
+}
+
+/** Parse datetimes from API: naive strings are UTC (matches FastAPI/SQLAlchemy naive-UTC storage). */
+function parseBackendUtcDate(raw: string | null | undefined): Date | null {
+  const s = (raw || '').trim();
+  if (!s) return null;
+
+  let candidate = s;
+  if (!hasExplicitTimezone(s)) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      candidate = `${s}T00:00:00Z`;
+    } else if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
+      candidate = `${s}Z`;
+    }
+  }
+
+  const parsed = new Date(candidate);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed;
+  }
+
+  const fallback = new Date(s);
+  return Number.isNaN(fallback.getTime()) ? null : fallback;
+}
+
+/** Short calendar date in UTC (stable day for naive-UTC payloads). */
+function formatShortPublishedDate(raw: string | null | undefined): string | null {
+  const parsed = parseBackendUtcDate(raw);
+  if (parsed === null) return null;
+  return parsed.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
 // TODO: Add score color scale and richer metadata chips.
 export default function ArticleCard({
   article,
@@ -74,13 +113,15 @@ export default function ArticleCard({
 
   if (compactRelease) {
     const rawDate = article.published_date || article.scraped_date;
-    const formattedDate = rawDate
-      ? new Date(rawDate).toLocaleString('en-US', {
+    const parsedDate = parseBackendUtcDate(rawDate || undefined);
+    const formattedDate = parsedDate
+      ? parsedDate.toLocaleString('en-US', {
           year: 'numeric',
           month: 'short',
           day: '2-digit',
           hour: '2-digit',
           minute: '2-digit',
+          timeZone: 'UTC',
         })
       : 'Date unavailable';
 
@@ -101,6 +142,8 @@ export default function ArticleCard({
       </article>
     );
   }
+
+  const publishedDisplay = formatShortPublishedDate(article.published_date);
 
   return (
     <article
@@ -158,9 +201,12 @@ export default function ArticleCard({
             </svg>
           </button>
         </div>
-        <span className="font-mono text-xs text-[#888888]">
-          {article.source_domain || 'unknown source'}
-        </span>
+        <div className="text-right font-mono text-[11px] leading-tight text-[#888888]">
+          {publishedDisplay ? (
+            <span className="mb-0.5 block text-[#666666]">{publishedDisplay}</span>
+          ) : null}
+          <span className="block text-xs">{article.source_domain || 'unknown source'}</span>
+        </div>
       </div>
 
       <div className="flex items-start justify-between gap-2">

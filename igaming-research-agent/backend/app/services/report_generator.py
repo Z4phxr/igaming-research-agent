@@ -76,8 +76,8 @@ def generate_briefing(articles: list[dict], db: Session | None = None) -> Option
     try:
         system_prompt = get_active_prompt_content(db, PROMPT_KEY_BRIEFING_SYSTEM, _SYSTEM_PROMPT_FALLBACK)
         response = anthropic_client.messages.create(
-            model="claude-sonnet-4-5",
-            max_tokens=1500,
+            model="claude-sonnet-4-6",
+            max_tokens=1700,
             temperature=0.3,
             system=system_prompt,
             messages=[{"role": "user", "content": f"Today's top iGaming stories:\n\n{context_string}"}],
