@@ -10,6 +10,20 @@ interface Props {
   compactRelease?: boolean;
 }
 
+/** Short display date when we have a parseable ISO/string from Serper or pipeline. */
+function formatShortPublishedDate(raw: string | null | undefined): string | null {
+  const s = (raw || '').trim();
+  if (!s) return null;
+  const parsed = new Date(s);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
 // TODO: Add score color scale and richer metadata chips.
 export default function ArticleCard({
   article,
@@ -102,6 +116,8 @@ export default function ArticleCard({
     );
   }
 
+  const publishedDisplay = formatShortPublishedDate(article.published_date);
+
   return (
     <article
       className={`space-y-3 rounded-lg border bg-[#111111] p-4 transition-all duration-150 ease-in-out hover:border-[#333333] hover:bg-[#151515] ${
@@ -158,9 +174,12 @@ export default function ArticleCard({
             </svg>
           </button>
         </div>
-        <span className="font-mono text-xs text-[#888888]">
-          {article.source_domain || 'unknown source'}
-        </span>
+        <div className="text-right font-mono text-[11px] leading-tight text-[#888888]">
+          {publishedDisplay ? (
+            <span className="mb-0.5 block text-[#666666]">{publishedDisplay}</span>
+          ) : null}
+          <span className="block text-xs">{article.source_domain || 'unknown source'}</span>
+        </div>
       </div>
 
       <div className="flex items-start justify-between gap-2">

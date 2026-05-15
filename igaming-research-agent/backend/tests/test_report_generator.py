@@ -12,8 +12,8 @@ class MockClaudeResponse:
 
 def test_generate_briefing_returns_string_on_success(monkeypatch):
     def fake_create(**kwargs):
-        assert kwargs["model"] == "claude-sonnet-4-5"
-        assert kwargs["max_tokens"] == 1500
+        assert kwargs["model"] == "claude-sonnet-4-6"
+        assert kwargs["max_tokens"] == 1700
         assert kwargs["temperature"] == 0.3
         assert "Today's top iGaming stories" in kwargs["messages"][0]["content"]
         return MockClaudeResponse("## Executive Summary\nBriefing body")

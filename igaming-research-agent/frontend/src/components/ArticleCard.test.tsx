@@ -27,6 +27,7 @@ describe('ArticleCard', () => {
     expect(screen.getByText('US iGaming market expands')).toBeInTheDocument();
     expect(screen.getByText('Regulatory momentum continues.')).toBeInTheDocument();
     expect(screen.getByText('8.0')).toBeInTheDocument();
+    expect(screen.getByText('Mar 22, 2026')).toBeInTheDocument();
     expect(screen.getByText('regulation')).toBeInTheDocument();
     expect(screen.getByText('licensing')).toBeInTheDocument();
   });

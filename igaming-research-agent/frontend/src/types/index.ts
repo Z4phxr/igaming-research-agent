@@ -20,7 +20,8 @@ export interface Article {
   article_type?: 'top_story' | 'release';
   tags: string;
   source_domain: string;
-  published_date: string;
+  /** ISO datetime from backend; optional when inference failed */
+  published_date?: string | null;
   scraped_date: string;
   kept: boolean;
   rejection_reason: string | null;
