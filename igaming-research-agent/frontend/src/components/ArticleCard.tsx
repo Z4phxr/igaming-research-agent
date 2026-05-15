@@ -10,12 +10,37 @@ interface Props {
   compactRelease?: boolean;
 }
 
-/** Short display date when we have a parseable ISO/string from Serper or pipeline. */
-function formatShortPublishedDate(raw: string | null | undefined): string | null {
+function hasExplicitTimezone(iso: string): boolean {
+  return /Z$/i.test(iso) || /[+-]\d{2}:?\d{2}$/.test(iso);
+}
+
+/** Parse datetimes from API: naive strings are UTC (matches FastAPI/SQLAlchemy naive-UTC storage). */
+function parseBackendUtcDate(raw: string | null | undefined): Date | null {
   const s = (raw || '').trim();
   if (!s) return null;
-  const parsed = new Date(s);
-  if (Number.isNaN(parsed.getTime())) return null;
+
+  let candidate = s;
+  if (!hasExplicitTimezone(s)) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      candidate = `${s}T00:00:00Z`;
+    } else if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
+      candidate = `${s}Z`;
+    }
+  }
+
+  const parsed = new Date(candidate);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed;
+  }
+
+  const fallback = new Date(s);
+  return Number.isNaN(fallback.getTime()) ? null : fallback;
+}
+
+/** Short calendar date in UTC (stable day for naive-UTC payloads). */
+function formatShortPublishedDate(raw: string | null | undefined): string | null {
+  const parsed = parseBackendUtcDate(raw);
+  if (parsed === null) return null;
   return parsed.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
@@ -88,13 +113,15 @@ export default function ArticleCard({
 
   if (compactRelease) {
     const rawDate = article.published_date || article.scraped_date;
-    const formattedDate = rawDate
-      ? new Date(rawDate).toLocaleString('en-US', {
+    const parsedDate = parseBackendUtcDate(rawDate || undefined);
+    const formattedDate = parsedDate
+      ? parsedDate.toLocaleString('en-US', {
           year: 'numeric',
           month: 'short',
           day: '2-digit',
           hour: '2-digit',
           minute: '2-digit',
+          timeZone: 'UTC',
         })
       : 'Date unavailable';
 

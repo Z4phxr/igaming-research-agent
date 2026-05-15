@@ -20,7 +20,7 @@ export interface Article {
   article_type?: 'top_story' | 'release';
   tags: string;
   source_domain: string;
-  /** ISO datetime from backend; optional when inference failed */
+  /** Datetime string from backend (often ISO without `Z`); interpret as UTC when offset is missing. */
   published_date?: string | null;
   scraped_date: string;
   kept: boolean;
