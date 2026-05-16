@@ -34,6 +34,7 @@ def test_acquire_enforces_rpm_window():
         max_requests_per_minute=2,
         min_interval_seconds=0.0,
         max_retries=0,
+        window_seconds=0.15,
     )
 
     limiter.acquire()
@@ -42,7 +43,8 @@ def test_acquire_enforces_rpm_window():
     limiter.acquire()
     elapsed = time.monotonic() - start
 
-    assert elapsed >= 0.05
+    assert elapsed >= 0.1
+    assert elapsed < 1.0
 
 
 def test_run_with_retry_on_rate_limit(monkeypatch):
@@ -68,6 +70,17 @@ def test_run_with_retry_on_rate_limit(monkeypatch):
 
     assert result == "ok"
     assert attempts["count"] == 3
+
+
+def test_env_bool_falls_back_to_default_on_unrecognized_value(monkeypatch):
+    monkeypatch.setenv("TEST_BOOL_FLAG", "treu")
+    assert rate_limit._env_bool("TEST_BOOL_FLAG", True) is True
+    assert rate_limit._env_bool("TEST_BOOL_FLAG", False) is False
+
+
+def test_env_bool_parses_explicit_false(monkeypatch):
+    monkeypatch.setenv("TEST_BOOL_FLAG", "false")
+    assert rate_limit._env_bool("TEST_BOOL_FLAG", True) is False
 
 
 def test_is_rate_limit_error_detects_status_code():

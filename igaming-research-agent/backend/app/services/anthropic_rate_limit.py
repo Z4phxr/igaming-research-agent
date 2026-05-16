@@ -1,7 +1,9 @@
-"""Client-side rate limiting for Anthropic Haiku analyzer calls.
+"""Client-side request-rate limiting for Anthropic Haiku analyzer calls.
 
-Keeps automated pipeline runs under typical tier limits (50 RPM, 50K input TPM)
-by spacing requests and retrying HTTP 429 responses with backoff.
+Keeps automated pipeline runs under typical request-rate limits by spacing
+requests and retrying HTTP 429 responses with backoff.
+
+This limiter does not estimate or enforce token-per-minute usage.
 """
 
 from __future__ import annotations
@@ -24,7 +26,17 @@ def _env_bool(name: str, default: bool) -> bool:
     raw = os.getenv(name, "").strip().lower()
     if not raw:
         return default
-    return raw in {"1", "true", "yes", "on"}
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    logger.warning(
+        "Unrecognized boolean value for %s: %r. Falling back to default=%s.",
+        name,
+        raw,
+        default,
+    )
+    return default
 
 
 def _env_float(name: str, default: float) -> float:
@@ -58,26 +70,28 @@ class AnthropicRateLimiter:
         min_interval_seconds: float = 1.3,
         max_retries: int = 5,
         retry_base_seconds: float = 2.0,
+        window_seconds: float = _WINDOW_SECONDS,
     ) -> None:
         self.enabled = enabled
         self.max_requests_per_minute = max(1, max_requests_per_minute)
         self.min_interval_seconds = max(0.0, min_interval_seconds)
         self.max_retries = max(0, max_retries)
         self.retry_base_seconds = max(0.1, retry_base_seconds)
+        self.window_seconds = max(0.1, window_seconds)
 
         self._lock = threading.Lock()
         self._request_times: deque[float] = deque()
         self._last_request_at = 0.0
 
     def _compute_wait_seconds(self, now: float) -> float:
-        while self._request_times and now - self._request_times[0] >= _WINDOW_SECONDS:
+        while self._request_times and now - self._request_times[0] >= self.window_seconds:
             self._request_times.popleft()
 
         waits: list[float] = []
 
         if len(self._request_times) >= self.max_requests_per_minute:
             oldest = self._request_times[0]
-            waits.append(_WINDOW_SECONDS - (now - oldest) + 0.05)
+            waits.append(self.window_seconds - (now - oldest) + 0.05)
 
         if self._last_request_at > 0 and self.min_interval_seconds > 0:
             elapsed = now - self._last_request_at
