@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 # Ensure required env vars exist before importing app modules.
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test.db")
 os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
+os.environ["ANTHROPIC_HAIKU_RATE_LIMIT_ENABLED"] = "false"
 
 import app.main as main_module
 from app.database import Base, get_db
