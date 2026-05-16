@@ -12,6 +12,7 @@ from typing import Optional
 from anthropic import Anthropic
 from sqlalchemy.orm import Session
 
+from app.services.anthropic_rate_limit import get_haiku_rate_limiter
 from app.services.prompt_manager import (
     PROMPT_KEY_REJECTION_EXPLAIN_SYSTEM,
     PROMPT_KEY_RELEVANCE_SYSTEM,
@@ -33,6 +34,16 @@ anthropic_client = Anthropic(api_key=_anthropic_api_key)
 _MODEL = os.getenv("ANTHROPIC_ANALYZER_MODEL", "claude-3-5-haiku-20241022").strip() or "claude-3-5-haiku-20241022"
 
 
+def _create_analyzer_message(*, operation_name: str, **kwargs):
+    """Rate-limited Haiku messages.create used by all analyzer LLM calls."""
+    limiter = get_haiku_rate_limiter()
+
+    def _call():
+        return anthropic_client.messages.create(model=_MODEL, **kwargs)
+
+    return limiter.run_with_retry(_call, operation_name=operation_name)
+
+
 def check_llm_connection() -> dict:
     """Perform a lightweight connectivity + model availability check."""
     if not _anthropic_api_key:
@@ -45,8 +56,8 @@ def check_llm_connection() -> dict:
         }
 
     try:
-        response = anthropic_client.messages.create(
-            model=_MODEL,
+        response = _create_analyzer_message(
+            operation_name="health_check",
             max_tokens=5,
             temperature=0,
             system="You are a health-check responder. Reply with OK.",
@@ -331,8 +342,8 @@ def infer_published_date_with_llm(
             "date_extract_system",
             _DATE_EXTRACT_SYSTEM_PROMPT_FALLBACK,
         )
-        response = anthropic_client.messages.create(
-            model=_MODEL,
+        response = _create_analyzer_message(
+            operation_name="date_extract",
             max_tokens=80,
             temperature=0,
             system=system_prompt,
@@ -445,8 +456,8 @@ def _explain_rejection_with_llm(article: dict, metadata: dict, db: Session | Non
             PROMPT_KEY_REJECTION_EXPLAIN_SYSTEM,
             _REJECTION_EXPLAIN_SYSTEM_PROMPT_FALLBACK,
         )
-        response = anthropic_client.messages.create(
-            model=_MODEL,
+        response = _create_analyzer_message(
+            operation_name="rejection_explain",
             max_tokens=120,
             temperature=0,
             system=system_prompt,
@@ -489,8 +500,8 @@ def is_relevant(article: dict, db: Session | None = None) -> bool:
         # Cost optimization: max_tokens=5 for a strict YES/NO answer.
         # Cost optimization: temperature=0 for deterministic outputs.
         # CHANGE 3: migrated model calls from OpenAI chat completions to Anthropic messages API.
-        response = anthropic_client.messages.create(
-            model=_MODEL,
+        response = _create_analyzer_message(
+            operation_name="relevance_check",
             max_tokens=10,
             temperature=0,
             system=system_prompt,
@@ -534,8 +545,8 @@ def score_and_summarize(article: dict | str, db: Session | None = None) -> Optio
         # Cost optimization: content is truncated to 3000 chars before request.
         # Cost optimization: temperature=0 for deterministic outputs.
         # CHANGE 3: migrated model calls from OpenAI chat completions to Anthropic messages API.
-        response = anthropic_client.messages.create(
-            model=_MODEL,
+        response = _create_analyzer_message(
+            operation_name="score_and_summarize",
             max_tokens=200,
             temperature=0,
             system=system_prompt,
