@@ -51,6 +51,8 @@ def test_get_report_by_id_returns_full_payload(client, db_session, seeded_query)
     assert body["id"] == report.id
     assert len(body["articles"]) == 1
     assert body["articles"][0]["url"] == "https://example.com/detailed-report"
+    assert body["articles"][0]["matched_query_id"] == seeded_query.id
+    assert body["articles"][0]["matched_search_term"] == seeded_query.search_term
 
 
 def test_post_reports_run_returns_200_with_mocked_pipeline(client, db_session):

@@ -101,6 +101,8 @@ def execute_search(query: Query) -> list[dict]:
                 "snippet": item.get("snippet") or "",
                 "source": item.get("source") or "",
                 "published_date": item.get("date") or item.get("published_date") or item.get("publishedAt"),
+                "matched_query_id": getattr(query, "id", None),
+                "matched_search_term": search_term,
             }
         )
 

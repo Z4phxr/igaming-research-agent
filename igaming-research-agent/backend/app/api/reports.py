@@ -25,6 +25,10 @@ router = APIRouter()
 feedback_router = APIRouter()
 
 
+def _report_articles_load_options():
+    return selectinload(ReportModel.articles).selectinload(ArticleModel.matched_query)
+
+
 def _effective_release_window_hours(db: Session) -> int:
     row = db.query(PipelineSettingsModel).first()
     if row is None:
@@ -76,6 +80,11 @@ def _serialize_report(report: ReportModel, show_all: bool, show_all_info: bool, 
     )
 
     def _serialize_article(article: ArticleModel) -> dict:
+        article_type = getattr(article, "article_type", "top_story")
+        matched_search_term = None
+        if article_type != "release" and article.matched_query is not None:
+            matched_search_term = article.matched_query.search_term
+
         payload = {
             "id": article.id,
             "title": article.title,
@@ -89,8 +98,9 @@ def _serialize_report(report: ReportModel, show_all: bool, show_all_info: bool, 
             "kept": article.kept,
             "rejection_reason": article.rejection_reason,
             "tags": article.tags,
-            "article_type": getattr(article, "article_type", "top_story"),
+            "article_type": article_type,
             "matched_query_id": article.matched_query_id,
+            "matched_search_term": matched_search_term,
             "published_date": article.published_date,
             "scraped_date": article.scraped_date,
             "created_at": article.created_at,
@@ -130,7 +140,7 @@ def list_reports(db: Session = Depends(get_db)):
 def _reevaluate_latest_top_stories(db: Session) -> dict:
     report = (
         db.query(ReportModel)
-        .options(selectinload(ReportModel.articles))
+        .options(_report_articles_load_options())
         .order_by(ReportModel.report_date.desc(), ReportModel.id.desc())
         .first()
     )
@@ -353,7 +363,7 @@ def run_top_stories_reevaluation(db: Session = Depends(get_db)):
 def get_latest_report(show_all: bool = False, show_all_info: bool = False, db: Session = Depends(get_db)):
     report = (
         db.query(ReportModel)
-        .options(selectinload(ReportModel.articles))
+        .options(_report_articles_load_options())
         .order_by(ReportModel.report_date.desc(), ReportModel.id.desc())
         .first()
     )
@@ -366,7 +376,7 @@ def get_latest_report(show_all: bool = False, show_all_info: bool = False, db: S
 def get_report(report_id: int, show_all: bool = False, show_all_info: bool = False, db: Session = Depends(get_db)):
     report = (
         db.query(ReportModel)
-        .options(selectinload(ReportModel.articles))
+        .options(_report_articles_load_options())
         .filter(ReportModel.id == report_id)
         .first()
     )

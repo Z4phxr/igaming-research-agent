@@ -55,6 +55,8 @@ def test_execute_search_maps_results(monkeypatch):
             "snippet": "alpha",
             "source": "",
             "published_date": None,
+            "matched_query_id": None,
+            "matched_search_term": "igaming",
         },
         {
             "title": "B",
@@ -62,6 +64,8 @@ def test_execute_search_maps_results(monkeypatch):
             "snippet": "beta",
             "source": "",
             "published_date": None,
+            "matched_query_id": None,
+            "matched_search_term": "igaming",
         },
     ]
 
@@ -88,15 +92,50 @@ def test_run_search_pipeline_deduplicates_urls(db_session, monkeypatch):
 
     monkeypatch.setenv("SERPER_API_KEY", "test-key")
 
+    queries_by_term = {row.search_term: row for row in search.get_active_queries(db_session)}
+
     def fake_execute(query):
+        query_id = queries_by_term[query.search_term].id
         if query.search_term == "q1":
             return [
-                {"title": "A", "url": "https://dup.example", "snippet": "1", "source": "", "published_date": None},
-                {"title": "B", "url": "https://u1.example", "snippet": "2", "source": "", "published_date": None},
+                {
+                    "title": "A",
+                    "url": "https://dup.example",
+                    "snippet": "1",
+                    "source": "",
+                    "published_date": None,
+                    "matched_query_id": query_id,
+                    "matched_search_term": "q1",
+                },
+                {
+                    "title": "B",
+                    "url": "https://u1.example",
+                    "snippet": "2",
+                    "source": "",
+                    "published_date": None,
+                    "matched_query_id": query_id,
+                    "matched_search_term": "q1",
+                },
             ]
         return [
-            {"title": "C", "url": "https://dup.example", "snippet": "3", "source": "", "published_date": None},
-            {"title": "D", "url": "https://u2.example", "snippet": "4", "source": "", "published_date": None},
+            {
+                "title": "C",
+                "url": "https://dup.example",
+                "snippet": "3",
+                "source": "",
+                "published_date": None,
+                "matched_query_id": query_id,
+                "matched_search_term": "q2",
+            },
+            {
+                "title": "D",
+                "url": "https://u2.example",
+                "snippet": "4",
+                "source": "",
+                "published_date": None,
+                "matched_query_id": query_id,
+                "matched_search_term": "q2",
+            },
         ]
 
     monkeypatch.setattr(search, "execute_search", fake_execute)
@@ -108,3 +147,5 @@ def test_run_search_pipeline_deduplicates_urls(db_session, monkeypatch):
         "https://u1.example",
         "https://u2.example",
     ]
+    dup = next(item for item in result if item["url"] == "https://dup.example")
+    assert dup["matched_search_term"] == "q1"

@@ -30,6 +30,8 @@ export interface Article {
   rejection_score?: number | null;
   rejection_detail?: string | null;
   rejection_llm_why?: string | null;
+  matched_query_id?: number | null;
+  matched_search_term?: string | null;
 }
 
 export interface ReleaseFailedSource {
