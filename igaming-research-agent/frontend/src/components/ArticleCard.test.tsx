@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import ArticleCard from '@/components/ArticleCard';
 
@@ -30,6 +31,37 @@ describe('ArticleCard', () => {
     expect(screen.getByText('Mar 22, 2026')).toBeInTheDocument();
     expect(screen.getByText('regulation')).toBeInTheDocument();
     expect(screen.getByText('licensing')).toBeInTheDocument();
+  });
+
+  it('toggles matched search query behind ellipsis control', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ArticleCard
+        article={{
+          id: 4,
+          title: 'Tracked article',
+          url: 'https://example.com/tracked',
+          summary: 'Summary',
+          score: 7,
+          kept: true,
+          rejection_reason: null,
+          passed_relevance_filter: true,
+          tags: 'M&A, technology',
+          matched_search_term: 'US sports betting legislation',
+          source_domain: 'example.com',
+          published_date: '2026-03-22T00:00:00',
+          scraped_date: new Date().toISOString(),
+        }}
+      />,
+    );
+
+    expect(screen.queryByText('US sports betting legislation')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /show google search query/i }));
+
+    expect(screen.getByText('US sports betting legislation')).toBeInTheDocument();
+    expect(screen.getByText(/found via:/i)).toBeInTheDocument();
   });
 
   it('compact release row parses naive UTC datetime (no Z) without breaking', () => {

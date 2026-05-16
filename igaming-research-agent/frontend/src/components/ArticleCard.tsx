@@ -60,12 +60,14 @@ export default function ArticleCard({
   const [feedbackError, setFeedbackError] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [modalType, setModalType] = useState<'score_too_low' | 'score_too_high'>('score_too_low');
+  const [showSearchQuery, setShowSearchQuery] = useState(false);
 
   const score = Number(article.score ?? 0);
   const tags = (article.tags || '')
     .split(',')
     .map((tag) => tag.trim())
     .filter(Boolean);
+  const matchedSearchTerm = article.matched_search_term?.trim() || '';
 
   const reason = article.rejection_reason ?? '';
   const freshnessReasons = new Set([
@@ -237,16 +239,35 @@ export default function ArticleCard({
 
       <p className="mt-2 text-sm leading-6 text-[#888888]">{article.summary || 'No summary yet.'}</p>
 
-      {tags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {tags.map((tag) => (
-            <span
-              key={tag}
-              className="rounded border border-[#222222] bg-[#1a1a1a] px-2 py-1 text-[11px] uppercase tracking-[0.05em] text-[#555555]"
-            >
-              {tag}
-            </span>
-          ))}
+      {(tags.length > 0 || matchedSearchTerm) && (
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {tags.map((tag) => (
+              <span
+                key={tag}
+                className="rounded border border-[#222222] bg-[#1a1a1a] px-2 py-1 text-[11px] uppercase tracking-[0.05em] text-[#555555]"
+              >
+                {tag}
+              </span>
+            ))}
+            {matchedSearchTerm && (
+              <button
+                type="button"
+                className="rounded border border-[#222222] bg-[#1a1a1a] px-2 py-1 font-mono text-[11px] text-[#888888] transition-colors hover:border-[#333333] hover:text-[#2563eb]"
+                aria-label={showSearchQuery ? 'Hide Google search query' : 'Show Google search query'}
+                aria-expanded={showSearchQuery}
+                onClick={() => setShowSearchQuery((current) => !current)}
+              >
+                ...
+              </button>
+            )}
+          </div>
+          {showSearchQuery && matchedSearchTerm && (
+            <p className="text-[11px] leading-5 text-[#666666]">
+              <span className="text-[#555555]">Found via:</span>{' '}
+              <span className="font-mono text-[#888888]">{matchedSearchTerm}</span>
+            </p>
+          )}
         </div>
       )}
 

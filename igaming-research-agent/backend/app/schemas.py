@@ -46,6 +46,7 @@ class ArticleOut(BaseModel):
     article_type: str = "top_story"
     tags: Optional[str] = None
     matched_query_id: Optional[int] = None
+    matched_search_term: Optional[str] = None
     published_date: Optional[datetime.datetime] = None
     scraped_date: datetime.datetime
     created_at: datetime.datetime

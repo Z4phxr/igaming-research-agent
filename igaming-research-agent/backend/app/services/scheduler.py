@@ -375,6 +375,8 @@ def _persist_articles(session: Session, items: list[dict]) -> list[Article]:
             existing.rejection_reason = item.get("rejection_reason")
             existing.tags = str(item.get("tags") or existing.tags)
             existing.article_type = str(item.get("article_type") or existing.article_type or "top_story")
+            if item.get("matched_query_id") is not None:
+                existing.matched_query_id = item.get("matched_query_id")
             if published_date is not None:
                 existing.published_date = published_date
             existing.scraped_date = datetime.datetime.utcnow()
